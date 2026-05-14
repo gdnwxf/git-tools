@@ -2,7 +2,7 @@
 
 当前仓库包含 2 个 Git 辅助脚本：
 
-- `create-branch-from-main.sh`：基于最新 `origin/main` 快速创建一个新的本地分支。
+- `create-branch-from-main.sh`：优先基于最新 `origin/main` 创建新的本地分支；如果没有 `main`，则回退到 `origin/master`。
 - `recreate-branch-from-remote.sh`：删除并重新拉取指定的本地分支，使其与远端 `origin/<branch>` 对齐。
 
 ## 使用前提
@@ -16,7 +16,7 @@
 
 ### 作用
 
-`create-branch-from-main.sh` 用于从最新的 `origin/main` 创建一个新的本地分支，并确保本地 `main` 先与远端 `main` 对齐。
+`create-branch-from-main.sh` 用于优先从最新的 `origin/main` 创建一个新的本地分支；如果远端没有 `main`，则自动回退到 `origin/master`，并确保对应的本地主分支先与远端对齐。
 
 ### 用法
 
@@ -35,19 +35,19 @@
 1. 校验当前目录是否为 Git 仓库。
 2. 校验已跟踪文件没有未提交改动。
 3. 执行 `git fetch --all --prune` 同步远端引用。
-4. 校验 `origin/main` 存在。
+4. 识别远端基线分支：优先使用 `origin/main`，如果不存在则回退到 `origin/master`。
 5. 校验目标分支名既不在本地存在，也不在远端 `origin` 存在。
-6. 如果本地 `main` 存在仅本地可见、尚未同步到 `origin/main` 的提交，脚本会直接失败，避免删除本地 `main` 后丢失提交。
-7. 如果当前正停留在本地 `main`，脚本会先切到 `origin/main` 的 detached HEAD。
-8. 删除本地 `main`，再基于 `origin/main` 重建本地 `main`。
-9. 基于最新本地 `main` 创建目标分支。
+6. 如果本地基线分支存在仅本地可见、尚未同步到远端基线分支的提交，脚本会直接失败，避免删除本地分支后丢失提交。
+7. 如果当前正停留在本地基线分支，脚本会先切到远端基线分支的 detached HEAD。
+8. 删除本地基线分支，再基于远端基线分支重建本地基线分支。
+9. 基于最新本地基线分支创建目标分支。
 
 ### 注意事项
 
 - 参数不能为空。
-- 目标分支名不能是 `main`。
-- 该脚本会删除并重建本地 `main`，但会先校验本地 `main` 是否存在未同步提交。
-- 如果远端不存在 `origin/main`，脚本会直接失败。
+- 该脚本会删除并重建本地基线分支，基线分支优先是 `main`，不存在时回退为 `master`。
+- 脚本会先校验本地基线分支是否存在未同步提交，避免删除后丢失本地独有提交。
+- 如果远端 `origin/main` 和 `origin/master` 都不存在，脚本会直接失败。
 
 ## recreate-branch-from-remote.sh
 
@@ -86,5 +86,5 @@
 
 ## 建议使用场景
 
-- `create-branch-from-main.sh`：从最新主线快速拉出一个新的开发分支。
+- `create-branch-from-main.sh`：从最新主线快速拉出一个新的开发分支，兼容主分支名为 `main` 或 `master` 的仓库。
 - `recreate-branch-from-remote.sh`：本地分支状态混乱，想直接丢弃本地同名分支并以远端状态为准重新拉取。

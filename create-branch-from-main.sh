@@ -33,12 +33,31 @@ ensure_clean_worktree() {
   fi
 }
 
-# @description 校验远端主分支是否存在
-# @param $1 远端主分支引用
-# @returns 校验失败时直接退出
-ensure_remote_branch_exists() {
+# @description 判断远端分支是否存在
+# @param $1 远端分支引用
+# @returns 存在时返回 0，不存在时返回 1
+remote_branch_exists() {
   local remote_branch_ref="$1"
-  git show-ref --verify --quiet "refs/remotes/${remote_branch_ref}" || fail "远端分支 ${remote_branch_ref} 不存在，请先执行 git fetch --all --prune 检查远端状态"
+  git show-ref --verify --quiet "refs/remotes/${remote_branch_ref}"
+}
+
+# @description 解析可用的远端基线分支，优先 main，其次 master
+# @param $1 远端名
+# @returns 输出解析出的基线分支名；若都不存在则直接退出
+resolve_base_branch() {
+  local remote_name="$1"
+
+  if remote_branch_exists "${remote_name}/main"; then
+    printf 'main\n'
+    return
+  fi
+
+  if remote_branch_exists "${remote_name}/master"; then
+    printf 'master\n'
+    return
+  fi
+
+  fail "远端分支 ${remote_name}/main 和 ${remote_name}/master 都不存在，请先执行 git fetch --all --prune 检查远端状态"
 }
 
 # @description 校验目标分支在本地和远端都不存在，避免覆盖已有分支
@@ -56,37 +75,33 @@ ensure_target_branch_available() {
   fi
 }
 
-# @description 校验本地 main 不存在仅本地可见的提交，避免删除后丢失提交
-# @param $1 本地主分支名
-# @param $2 远端主分支引用
+# @description 校验本地基线分支不存在仅本地可见的提交，避免删除后丢失提交
+# @param $1 本地基线分支名
+# @param $2 远端基线分支引用
 # @returns 校验失败时直接退出
-ensure_main_has_no_local_only_commits() {
-  local main_branch="$1"
-  local remote_main_ref="$2"
+ensure_base_branch_has_no_local_only_commits() {
+  local base_branch="$1"
+  local remote_base_ref="$2"
 
-  if ! git show-ref --verify --quiet "refs/heads/${main_branch}"; then
+  if ! git show-ref --verify --quiet "refs/heads/${base_branch}"; then
     return
   fi
 
-  # 这里显式阻断本地 main 超前于 origin/main 的场景，避免删除后丢失仅存在于本地的提交。
-  if [[ "$(git rev-list --count "${remote_main_ref}..${main_branch}")" -gt 0 ]]; then
-    fail "本地分支 ${main_branch} 存在未同步到 ${remote_main_ref} 的提交，已停止执行以避免提交丢失"
+  # 这里显式阻断本地基线分支超前于远端基线分支的场景，避免删除后丢失仅存在于本地的提交。
+  if [[ "$(git rev-list --count "${remote_base_ref}..${base_branch}")" -gt 0 ]]; then
+    fail "本地分支 ${base_branch} 存在未同步到 ${remote_base_ref} 的提交，已停止执行以避免提交丢失"
   fi
 }
 
 target_branch="${1:-}"
-main_branch="main"
 remote_name="origin"
-remote_main_ref="${remote_name}/${main_branch}"
+base_branch=""
+remote_base_ref=""
 
 ensure_git_repo
 
 if [[ -z "${target_branch}" ]]; then
   fail "用法: ./create-branch-from-main.sh <新分支名>"
-fi
-
-if [[ "${target_branch}" == "${main_branch}" ]]; then
-  fail "目标分支名不能是 ${main_branch}"
 fi
 
 current_branch="$(git branch --show-current)"
@@ -99,23 +114,25 @@ ensure_clean_worktree
 
 step 2 "同步所有远端分支引用"
 git fetch --all --prune
-ensure_remote_branch_exists "${remote_main_ref}"
+base_branch="$(resolve_base_branch "${remote_name}")"
+remote_base_ref="${remote_name}/${base_branch}"
+printf '步骤2结果: 选用远端基线分支 %s\n' "${remote_base_ref}"
 ensure_target_branch_available "${target_branch}"
-ensure_main_has_no_local_only_commits "${main_branch}" "${remote_main_ref}"
+ensure_base_branch_has_no_local_only_commits "${base_branch}" "${remote_base_ref}"
 
-step 3 "必要时脱离本地 ${main_branch}，避免删除当前分支失败"
-if [[ "${current_branch}" == "${main_branch}" ]]; then
-  git checkout --detach "${remote_main_ref}"
+step 3 "必要时脱离本地 ${base_branch}，避免删除当前分支失败"
+if [[ "${current_branch}" == "${base_branch}" ]]; then
+  git checkout --detach "${remote_base_ref}"
 fi
 
-step 4 "删除并重建本地 ${main_branch}"
-if git show-ref --verify --quiet "refs/heads/${main_branch}"; then
-  git branch -D "${main_branch}"
+step 4 "删除并重建本地 ${base_branch}"
+if git show-ref --verify --quiet "refs/heads/${base_branch}"; then
+  git branch -D "${base_branch}"
 fi
-git checkout -b "${main_branch}" "${remote_main_ref}"
-git pull --ff-only "${remote_name}" "${main_branch}"
+git checkout -b "${base_branch}" "${remote_base_ref}"
+git pull --ff-only "${remote_name}" "${base_branch}"
 
-step 5 "基于最新 ${main_branch} 创建目标分支 ${target_branch}"
+step 5 "基于最新 ${base_branch} 创建目标分支 ${target_branch}"
 git checkout -b "${target_branch}"
 
-printf '\n完成: 已基于 %s 创建本地分支 %s\n' "${main_branch}" "${target_branch}"
+printf '\n完成: 已基于 %s 创建本地分支 %s\n' "${base_branch}" "${target_branch}"
