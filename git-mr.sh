@@ -15,7 +15,7 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
-  ./git-merge.sh <目标分支>
+  ./git-mr.sh <目标分支>
 
 说明:
   输出当前分支到目标分支的 GitLab Merge Request 新建链接。
