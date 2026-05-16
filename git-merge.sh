@@ -9,6 +9,23 @@ fail() {
   exit 1
 }
 
+# @description 输出脚本帮助信息
+# @param 无
+# @returns 无
+print_help() {
+  cat <<'EOF'
+用法:
+  ./git-merge.sh <目标分支>
+
+说明:
+  输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+
+原理:
+  读取 origin 远端地址并转换成仓库页面地址，
+  再拼接当前分支和目标分支生成 MR 创建链接。
+EOF
+}
+
 # @description 校验当前目录是否位于 Git 仓库内
 # @param 无
 # @returns 校验失败时直接退出
@@ -69,11 +86,17 @@ build_merge_request_url() {
 
 target_branch="${1:-}"
 
-ensure_git_repo
+if [[ "${target_branch}" == "-h" || "${target_branch}" == "--help" || "${target_branch}" == "help" ]]; then
+  print_help
+  exit 0
+fi
 
 if [[ -z "${target_branch}" ]]; then
-  fail "用法: ./git-merge.sh <目标分支>"
+  print_help >&2
+  exit 1
 fi
+
+ensure_git_repo
 
 current_branch="$(git branch --show-current)"
 if [[ -z "${current_branch}" ]]; then
