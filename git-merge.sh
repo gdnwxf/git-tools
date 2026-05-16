@@ -48,30 +48,6 @@ resolve_repo_web_url() {
   printf 'https://%s/%s\n' "${host}" "${repo_path}"
 }
 
-# @description 对输入内容做 URL 编码，避免特殊字符破坏链接格式
-# @param $1 原始字符串
-# @returns 输出编码后的字符串
-urlencode() {
-  local raw_value="$1"
-  local index=""
-  local char=""
-  local encoded=""
-
-  for ((index = 0; index < ${#raw_value}; index++)); do
-    char="${raw_value:index:1}"
-    case "${char}" in
-      [a-zA-Z0-9.~_-])
-        encoded+="${char}"
-        ;;
-      *)
-        printf -v encoded '%s%%%02X' "${encoded}" "'${char}"
-        ;;
-    esac
-  done
-
-  printf '%s\n' "${encoded}"
-}
-
 # @description 拼接 GitLab 新建 MR 链接
 # @param $1 仓库页面地址
 # @param $2 源分支
@@ -88,7 +64,7 @@ build_merge_request_url() {
     "${source_branch}" \
     "${target_branch}"
 
-  urlencode "${raw_url}"
+  printf '%s\n' "${raw_url}"
 }
 
 target_branch="${1:-}"
