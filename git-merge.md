@@ -1,8 +1,8 @@
-# merge.sh
+# git-merge.sh
 
 ## 作用
 
-`merge.sh` 用于基于远端基线分支创建或重建一个本地目标分支，并把另一个远端分支的最新内容合并进来。
+`git-merge.sh` 用于基于远端基线分支创建或重建一个本地目标分支，并把另一个远端分支的最新内容合并进来。
 
 ## 原理描述
 
@@ -11,7 +11,7 @@
 执行：
 
 ```bash
-./merge.sh a b c
+./git-merge.sh a b c
 ```
 
 等价语义是：
@@ -23,13 +23,13 @@
 ## 用法
 
 ```bash
-./merge.sh <远端基线分支a> <本地目标分支b> <远端来源分支c>
+./git-merge.sh <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ```
 
 ### 示例
 
 ```bash
-./merge.sh local feature/test release
+./git-merge.sh local feature/test release
 ```
 
 上面这条命令表示：
@@ -90,7 +90,7 @@ git merge --no-edit origin/c
 - 参数不能为空，否则会提示：
 
 ```bash
-用法: ./merge.sh <远端基线分支a> <本地目标分支b> <远端来源分支c>
+用法: ./git-merge.sh <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ```
 
 - 本地已跟踪文件有未提交改动时，脚本会直接失败。

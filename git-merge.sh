@@ -23,7 +23,7 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
-  ./merge.sh <远端基线分支a> <本地目标分支b> <远端来源分支c>
+  ./git-merge.sh <远端基线分支a> <本地目标分支b> <远端来源分支c>
 
 说明:
   基于最新 origin/a 创建或重建本地 b，再把最新 origin/c 合并到 b。
