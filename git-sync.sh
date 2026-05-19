@@ -105,6 +105,7 @@ target_branch=""
 remote_branch=""
 remote_name="origin"
 temp_branch="date_$(date +%Y%m%d_%H%M%S)"
+temp_branch_created=0
 
 if [[ "${mode}" == "-h" || "${mode}" == "--help" || "${mode}" == "help" ]]; then
   print_help
@@ -166,6 +167,7 @@ case "${mode}" in
         fail "临时分支 ${temp_branch} 已存在，请稍后重试"
       fi
       git checkout -b "${temp_branch}"
+      temp_branch_created=1
     fi
 
     step 4 "删除本地分支 ${target_branch}"
@@ -175,6 +177,11 @@ case "${mode}" in
 
     step 5 "从远端 ${remote_name}/${remote_branch} 重新拉取并切换到 ${target_branch}"
     git checkout -b "${target_branch}" "${remote_name}/${remote_branch}"
+
+    if [[ "${temp_branch_created}" -eq 1 ]]; then
+      step 6 "删除临时分支 ${temp_branch}"
+      git branch -D "${temp_branch}"
+    fi
 
     printf '\n完成: 已从 %s/%s 重新拉取本地分支 %s\n' "${remote_name}" "${remote_branch}" "${target_branch}"
     ;;
