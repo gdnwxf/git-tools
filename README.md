@@ -1,12 +1,13 @@
 # git-tools
 
-当前仓库包含 4 个 Git 辅助脚本和 1 份独立说明文档。
+当前仓库包含 5 个 Git 辅助脚本和 1 份独立说明文档。
 
 脚本：
 
 - `create-branch-from-remote.sh`：基于指定远端分支创建新的本地分支；如果只传一个参数，则默认按同名远端分支创建。
 - `git-sync.sh`：支持 `new` 和 `sync` 两种模式；既能基于远端创建新分支，也能按远端重建本地分支。
 - `git-mr.sh`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+- `git-compare.sh`：输出目标分支与对比分支的 GitLab Compare 链接。
 - `git-merge.sh`：基于远端基线分支创建或重建本地目标分支，再合并另一个远端分支。
 
 独立文档：
@@ -129,6 +130,7 @@
 - `create-branch-from-remote.sh`：从指定远端分支快速拉出一个新的本地分支，且创建动作始终以远端状态为准。
 - `git-sync.sh`：希望统一入口处理“新建分支”和“按远端重建分支”两类动作时使用；默认省略模式时按 `sync` 处理。
 - `git-mr.sh`：已经切到源分支，只想快速生成当前分支指向目标分支的 GitLab MR 新建链接时使用。
+- `git-compare.sh`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
 - `git-merge.sh`：希望严格以远端 `origin/a` 为基线，先创建或重建本地 `b`，再把最新 `origin/c` 合并进来时使用。
 
 ## git-mr.sh
@@ -169,6 +171,49 @@
 - 该脚本只输出链接，不会执行 `git push`、`git merge` 或创建 MR。
 - 当前处于 detached HEAD 时，脚本会直接失败。
 - 目前默认按 GitLab 的 MR 地址格式拼接链接。
+
+## git-compare.sh
+
+### 作用
+
+`git-compare.sh` 用于输出 GitLab Compare 链接。脚本会自动读取当前仓库的 `origin` 地址，转换成仓库页面地址，再拼接目标分支和对比分支。
+
+### 原理描述
+
+这个脚本的核心原理是把 `origin` 远端地址解析为 `https://<host>/<group>/<repo>`，然后拼接成 `https://<host>/<group>/<repo>/-/compare/<目标分支>..<对比分支>`。
+
+### 用法
+
+```bash
+./git-compare.sh <目标分支> [对比分支]
+```
+
+如果省略对比分支，则默认使用当前本地分支。
+
+### 示例
+
+```bash
+./git-compare.sh release
+./git-compare.sh release feature/order-refactor
+```
+
+第一条命令表示输出 `release..当前分支` 的 Compare 链接。  
+第二条命令表示输出 `release..feature/order-refactor` 的 Compare 链接。
+
+### 执行流程
+
+1. 校验当前目录是否为 Git 仓库。
+2. 读取 `origin` 远端地址。
+3. 把远端地址转换为仓库页面地址。
+4. 如果没有显式传入对比分支，则读取当前本地分支作为对比分支。
+5. 基于目标分支和对比分支拼接 Compare 链接并输出。
+
+### 注意事项
+
+- 参数不能为空。
+- 该脚本只输出链接，不会执行 `git push`、`git merge` 或创建 Compare 页面。
+- 省略对比分支且当前处于 detached HEAD 时，脚本会直接失败。
+- 目前默认按 GitLab 的 Compare 地址格式拼接链接。
 
 ## git-merge.sh
 
