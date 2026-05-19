@@ -5,14 +5,14 @@
 脚本：
 
 - `create-branch-from-remote.sh`：基于指定远端分支创建新的本地分支；如果只传一个参数，则默认按同名远端分支创建。
-- `git-sync.sh`：支持 `new` 和 `sync` 两种模式；既能基于远端创建新分支，也能按远端重建本地分支。
-- `git-mr.sh`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
-- `git-compare.sh`：输出目标分支与对比分支的 GitLab Compare 链接。
-- `git-merge.sh`：基于远端基线分支创建或重建本地目标分支，再合并另一个远端分支。
+- `sync`：支持 `new` 和 `sync` 两种模式；既能基于远端创建新分支，也能按远端重建本地分支。
+- `mr`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+- `cmp`：输出目标分支与对比分支的 GitLab Compare 链接。
+- `merge`：基于远端基线分支创建或重建本地目标分支，再合并另一个远端分支。
 
 独立文档：
 
-- `git-merge.md`：单独说明 `git-merge.sh` 的使用方式、执行流程和注意事项。
+- `git-merge.md`：单独说明 `merge` 的使用方式、执行流程和注意事项。
 
 ## 使用前提
 
@@ -64,11 +64,11 @@
 - 如果本地已存在同名目标分支 `a`，脚本会直接失败。
 - 如果目标远端分支不存在，脚本会直接失败。
 
-## git-sync.sh
+## sync
 
 ### 作用
 
-`git-sync.sh` 用于统一处理两类场景：
+`sync` 用于统一处理两类场景：
 
 - `new`：基于指定远端分支创建新的本地分支
 - `sync`：按指定远端分支重建本地分支；如果本地目标分支已存在，会先删除再重建
@@ -82,18 +82,18 @@
 ### 用法
 
 ```bash
-./git-sync.sh new <本地分支名a> [远端分支名b]
-./git-sync.sh sync <本地分支名a> [远端分支名b]
-./git-sync.sh <本地分支名a> [远端分支名b]
+./sync new <本地分支名a> [远端分支名b]
+./sync sync <本地分支名a> [远端分支名b]
+./sync <本地分支名a> [远端分支名b]
 ```
 
 ### 示例
 
 ```bash
-./git-sync.sh new feature/order-refactor
-./git-sync.sh new feature/order-refactor release
-./git-sync.sh sync feature/order-refactor
-./git-sync.sh sync feature/order-refactor release
+./sync new feature/order-refactor
+./sync new feature/order-refactor release
+./sync sync feature/order-refactor
+./sync sync feature/order-refactor release
 ```
 
 第一条命令表示新建本地 `feature/order-refactor`，基线是最新 `origin/feature/order-refactor`。  
@@ -128,16 +128,16 @@
 ## 建议使用场景
 
 - `create-branch-from-remote.sh`：从指定远端分支快速拉出一个新的本地分支，且创建动作始终以远端状态为准。
-- `git-sync.sh`：希望统一入口处理“新建分支”和“按远端重建分支”两类动作时使用；默认省略模式时按 `sync` 处理。
-- `git-mr.sh`：已经切到源分支，只想快速生成当前分支指向目标分支的 GitLab MR 新建链接时使用。
-- `git-compare.sh`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
-- `git-merge.sh`：希望严格以远端 `origin/a` 为基线，先创建或重建本地 `b`，再把最新 `origin/c` 合并进来时使用。
+- `sync`：希望统一入口处理“新建分支”和“按远端重建分支”两类动作时使用；默认省略模式时按 `sync` 处理。
+- `mr`：已经切到源分支，只想快速生成当前分支指向目标分支的 GitLab MR 新建链接时使用。
+- `cmp`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
+- `merge`：希望严格以远端 `origin/a` 为基线，先创建或重建本地 `b`，再把最新 `origin/c` 合并进来时使用。
 
-## git-mr.sh
+## mr
 
 ### 作用
 
-`git-mr.sh` 用于输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+`mr` 用于输出当前分支到目标分支的 GitLab Merge Request 新建链接。
 
 ### 原理描述
 
@@ -146,13 +146,13 @@
 ### 用法
 
 ```bash
-./git-mr.sh <目标分支>
+./mr <目标分支>
 ```
 
 ### 示例
 
 ```bash
-./git-mr.sh release
+./mr release
 ```
 
 这条命令表示基于当前所在本地分支，生成一个目标分支为 `release` 的 GitLab MR 新建链接。
@@ -172,11 +172,11 @@
 - 当前处于 detached HEAD 时，脚本会直接失败。
 - 目前默认按 GitLab 的 MR 地址格式拼接链接。
 
-## git-compare.sh
+## cmp
 
 ### 作用
 
-`git-compare.sh` 用于输出 GitLab Compare 链接。脚本会自动读取当前仓库的 `origin` 地址，转换成仓库页面地址，再拼接目标分支和对比分支。
+`cmp` 用于输出 GitLab Compare 链接。脚本会自动读取当前仓库的 `origin` 地址，转换成仓库页面地址，再拼接目标分支和对比分支。
 
 ### 原理描述
 
@@ -185,7 +185,7 @@
 ### 用法
 
 ```bash
-./git-compare.sh <目标分支> [对比分支]
+./cmp <目标分支> [对比分支]
 ```
 
 如果省略对比分支，则默认使用当前本地分支。
@@ -193,8 +193,8 @@
 ### 示例
 
 ```bash
-./git-compare.sh release
-./git-compare.sh release feature/order-refactor
+./cmp release
+./cmp release feature/order-refactor
 ```
 
 第一条命令表示输出 `release..当前分支` 的 Compare 链接。  
@@ -215,11 +215,11 @@
 - 省略对比分支且当前处于 detached HEAD 时，脚本会直接失败。
 - 目前默认按 GitLab 的 Compare 地址格式拼接链接。
 
-## git-merge.sh
+## merge
 
 ### 作用
 
-`git-merge.sh` 用于基于远端基线分支创建或重建一个本地目标分支，并把另一个远端分支的最新内容合并进来。
+`merge` 用于基于远端基线分支创建或重建一个本地目标分支，并把另一个远端分支的最新内容合并进来。
 
 ### 原理描述
 
@@ -228,13 +228,13 @@
 ### 用法
 
 ```bash
-./git-merge.sh <远端基线分支a> <本地目标分支b> <远端来源分支c>
+./merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ```
 
 ### 示例
 
 ```bash
-./git-merge.sh local feature/test release
+./merge local feature/test release
 ```
 
 上面这条命令表示本地 `feature/test` 会先按最新 `origin/local` 创建或重建，再把最新 `origin/release` 合并进来。
