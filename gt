@@ -26,6 +26,10 @@ print_help() {
   ./gt sync <本地分支名a> [远端分支名b]
   ./gt new <本地分支名a> [远端分支名b]
   ./gt <本地分支名a> [远端分支名b]
+  ./gt cmpr <目标远端分支> [对比分支]
+  ./gt mr <目标分支>
+  ./gt merge <远端基线分支a> <远端来源分支b>
+  ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 
 说明:
   `sync`:
@@ -38,6 +42,15 @@ print_help() {
     如果传了 b，则按最新 origin/b 创建；
     如果只传 a，则按最新 origin/a 创建。
 
+  `cmpr`:
+    输出 GitLab Compare 链接。
+
+  `mr`:
+    输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+
+  `merge`:
+    基于远端基线分支创建或重建本地目标分支，再合并远端来源分支。
+
   兼容旧用法:
     省略模式时，默认按 `sync` 处理。
 
@@ -48,11 +61,92 @@ print_help() {
 EOF
 }
 
+# @description 输出 gt cmpr 子命令帮助信息
+# @param 无
+# @returns 无
+print_cmpr_help() {
+  cat <<'EOF'
+用法:
+  ./gt cmpr <目标远端分支> [对比分支]
+
+示例:
+  ./gt cmpr release
+  ./gt cmpr release feature/order-refactor
+
+说明:
+  输出 GitLab Compare 链接，格式为：
+  https://<host>/<group>/<repo>/-/compare/<目标远端分支>...<对比分支>
+
+  如果省略对比分支，则默认使用当前本地分支，
+  表示当前本地分支和目标远端分支做对比。
+EOF
+}
+
+# @description 输出 gt mr 子命令帮助信息
+# @param 无
+# @returns 无
+print_mr_help() {
+  cat <<'EOF'
+用法:
+  ./gt mr <目标分支>
+
+说明:
+  输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+EOF
+}
+
+# @description 输出 gt merge 子命令帮助信息
+# @param 无
+# @returns 无
+print_merge_help() {
+  cat <<'EOF'
+用法:
+  ./gt merge <远端基线分支a> <远端来源分支b>
+  ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+
+说明:
+  传 2 个参数时：基于最新 origin/a 创建或重建本地 a，再把最新 origin/b 合并到 a。
+  传 3 个参数时：基于最新 origin/a 创建或重建本地 b，再把最新 origin/c 合并到 b。
+EOF
+}
+
 # @description 校验当前目录是否位于 Git 仓库内
 # @param 无
 # @returns 校验失败时直接退出
 ensure_git_repo() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "当前目录不是 Git 仓库"
+}
+
+# @description 读取当前仓库的 origin 地址
+# @param 无
+# @returns 输出 origin 地址；读取失败时直接退出
+get_origin_url() {
+  git remote get-url origin 2>/dev/null || fail "未找到 origin 远端地址"
+}
+
+# @description 将 Git 远端地址转换为可访问的仓库页面地址
+# @param $1 Git 远端地址
+# @returns 输出转换后的仓库页面地址；无法解析时直接退出
+resolve_repo_web_url() {
+  local remote_url="$1"
+  local host=""
+  local repo_path=""
+
+  if [[ "${remote_url}" =~ ^git@([^:]+):(.+)$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    repo_path="${BASH_REMATCH[2]}"
+  elif [[ "${remote_url}" =~ ^https?://([^/]+)/(.+)$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    repo_path="${BASH_REMATCH[2]}"
+  elif [[ "${remote_url}" =~ ^ssh://git@([^/]+)/(.+)$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    repo_path="${BASH_REMATCH[2]}"
+  else
+    fail "无法解析 origin 地址: ${remote_url}"
+  fi
+
+  repo_path="${repo_path%.git}"
+  printf 'https://%s/%s\n' "${host}" "${repo_path}"
 }
 
 # @description 校验已跟踪文件是否干净，忽略未跟踪文件，避免切换分支和删分支时夹带未提交改动
@@ -100,6 +194,193 @@ ensure_target_branch_has_no_local_only_commits() {
   fi
 }
 
+# @description 校验本地分支不存在仅本地可见的提交，避免重置到远端后丢失提交
+# @param $1 本地分支名
+# @param $2 远端分支引用
+# @returns 校验失败时直接退出
+ensure_branch_has_no_local_only_commits() {
+  local branch_name="$1"
+  local remote_branch_ref="$2"
+
+  if ! git show-ref --verify --quiet "refs/heads/${branch_name}"; then
+    return
+  fi
+
+  if [[ "$(git rev-list --count "${remote_branch_ref}..${branch_name}")" -gt 0 ]]; then
+    fail "本地分支 ${branch_name} 存在未同步到 ${remote_branch_ref} 的提交，已停止执行以避免提交丢失"
+  fi
+}
+
+# @description 拼接 GitLab Compare 链接
+# @param $1 仓库页面地址
+# @param $2 目标分支
+# @param $3 对比分支
+# @returns 输出拼接后的 Compare 链接
+build_compare_url() {
+  local repo_web_url="$1"
+  local target_branch="$2"
+  local compare_branch="$3"
+  local raw_url=""
+
+  printf -v raw_url '%s/-/compare/%s...%s' \
+    "${repo_web_url}" \
+    "${target_branch}" \
+    "${compare_branch}"
+
+  printf '%s\n' "${raw_url}"
+}
+
+# @description 执行 GitLab Compare 链接输出子命令
+# @param $@ 目标远端分支和可选对比分支
+# @returns 输出 Compare 链接
+run_cmpr() {
+  local target_branch="${1:-}"
+  local compare_branch="${2:-}"
+  local origin_url=""
+  local repo_web_url=""
+
+  if [[ "${target_branch}" == "-h" || "${target_branch}" == "--help" || "${target_branch}" == "help" ]]; then
+    print_cmpr_help
+    exit 0
+  fi
+
+  if [[ -z "${target_branch}" || "$#" -gt 2 ]]; then
+    print_cmpr_help >&2
+    exit 1
+  fi
+
+  ensure_git_repo
+
+  if [[ -z "${compare_branch}" ]]; then
+    compare_branch="$(git branch --show-current)"
+    if [[ -z "${compare_branch}" ]]; then
+      fail "当前处于 detached HEAD，无法识别默认对比分支，请显式传入对比分支"
+    fi
+  fi
+
+  origin_url="$(get_origin_url)"
+  repo_web_url="$(resolve_repo_web_url "${origin_url}")"
+  build_compare_url "${repo_web_url}" "${target_branch}" "${compare_branch}"
+}
+
+# @description 拼接 GitLab 新建 MR 链接
+# @param $1 仓库页面地址
+# @param $2 源分支
+# @param $3 目标分支
+# @returns 输出拼接后的 MR 链接
+build_merge_request_url() {
+  local repo_web_url="$1"
+  local source_branch="$2"
+  local target_branch="$3"
+  local raw_url=""
+
+  printf -v raw_url '%s/-/merge_requests/new?merge_request[source_branch]=%s&merge_request[target_branch]=%s' \
+    "${repo_web_url}" \
+    "${source_branch}" \
+    "${target_branch}"
+
+  printf '%s\n' "${raw_url}"
+}
+
+# @description 执行 GitLab MR 链接输出子命令
+# @param $@ 目标分支
+# @returns 输出 MR 链接
+run_mr() {
+  local target_branch="${1:-}"
+  local current_branch=""
+  local origin_url=""
+  local repo_web_url=""
+
+  if [[ "${target_branch}" == "-h" || "${target_branch}" == "--help" || "${target_branch}" == "help" ]]; then
+    print_mr_help
+    exit 0
+  fi
+
+  if [[ -z "${target_branch}" || "$#" -gt 1 ]]; then
+    print_mr_help >&2
+    exit 1
+  fi
+
+  ensure_git_repo
+
+  current_branch="$(git branch --show-current)"
+  if [[ -z "${current_branch}" ]]; then
+    fail "当前处于 detached HEAD，无法识别源分支"
+  fi
+
+  origin_url="$(get_origin_url)"
+  repo_web_url="$(resolve_repo_web_url "${origin_url}")"
+  build_merge_request_url "${repo_web_url}" "${current_branch}" "${target_branch}"
+}
+
+# @description 执行远端基线创建或重建本地目标分支并合并远端来源分支
+# @param $@ 远端基线分支、可选本地目标分支、远端来源分支
+# @returns 合并成功时输出完成信息
+run_merge() {
+  local base_branch="${1:-}"
+  local target_branch=""
+  local source_branch=""
+  local remote_name="origin"
+  local base_remote_ref=""
+  local source_remote_ref=""
+
+  if [[ "${base_branch}" == "-h" || "${base_branch}" == "--help" || "${base_branch}" == "help" ]]; then
+    print_merge_help
+    exit 0
+  fi
+
+  if [[ -z "${base_branch}" || -z "${2:-}" ]]; then
+    print_merge_help >&2
+    exit 1
+  fi
+
+  case "$#" in
+    2)
+      target_branch="${base_branch}"
+      source_branch="$2"
+      ;;
+    3)
+      target_branch="$2"
+      source_branch="$3"
+      ;;
+    *)
+      print_merge_help >&2
+      exit 1
+      ;;
+  esac
+
+  if [[ "$#" -eq 3 && ("${target_branch}" == "${base_branch}" || "${target_branch}" == "${source_branch}") ]]; then
+    fail "本地目标分支不能与远端基线分支或远端来源分支同名"
+  fi
+
+  ensure_git_repo
+
+  step 1 "校验仓库状态与输入参数"
+  ensure_clean_worktree
+
+  step 2 "同步远端分支引用"
+  git fetch --all --prune
+  base_remote_ref="${remote_name}/${base_branch}"
+  source_remote_ref="${remote_name}/${source_branch}"
+  ensure_remote_branch_exists "${base_remote_ref}"
+  ensure_remote_branch_exists "${source_remote_ref}"
+  ensure_branch_has_no_local_only_commits "${target_branch}" "${base_remote_ref}"
+
+  step 3 "基于最新 ${base_remote_ref} 创建或重建本地 ${target_branch}"
+  git checkout --detach "${base_remote_ref}"
+  git checkout -B "${target_branch}"
+
+  step 4 "合并最新 ${source_remote_ref} 到 ${target_branch}"
+  if ! git merge --no-edit "${source_remote_ref}"; then
+    fail "合并 ${source_remote_ref} 到 ${target_branch} 失败，请解决冲突后再继续"
+  fi
+
+  printf '\n完成: 已基于最新 %s 创建本地分支 %s，并合并最新 %s\n' \
+    "${base_remote_ref}" \
+    "${target_branch}" \
+    "${source_remote_ref}"
+}
+
 mode="${1:-}"
 target_branch=""
 remote_branch=""
@@ -111,6 +392,24 @@ if [[ "${mode}" == "-h" || "${mode}" == "--help" || "${mode}" == "help" ]]; then
   print_help
   exit 0
 fi
+
+case "${mode}" in
+  cmpr)
+    shift
+    run_cmpr "$@"
+    exit 0
+    ;;
+  mr)
+    shift
+    run_mr "$@"
+    exit 0
+    ;;
+  merge)
+    shift
+    run_merge "$@"
+    exit 0
+    ;;
+esac
 
 case "${mode}" in
   new|sync)

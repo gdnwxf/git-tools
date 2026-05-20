@@ -32,6 +32,8 @@
 ```bash
 ./merge <远端基线分支a> <远端来源分支b>
 ./merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+./gt merge <远端基线分支a> <远端来源分支b>
+./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ```
 
 ### 示例
@@ -39,6 +41,8 @@
 ```bash
 ./merge local release
 ./merge local feature/test release
+./gt merge local release
+./gt merge local feature/test release
 ```
 
 第一条命令表示：
@@ -109,6 +113,8 @@ git merge --no-edit origin/c
 用法:
   ./merge <远端基线分支a> <远端来源分支b>
   ./merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+  ./gt merge <远端基线分支a> <远端来源分支b>
+  ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ```
 
 - 本地已跟踪文件有未提交改动时，脚本会直接失败。
