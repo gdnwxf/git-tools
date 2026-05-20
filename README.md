@@ -7,7 +7,7 @@
 - `create-branch-from-remote.sh`：基于指定远端分支创建新的本地分支；如果只传一个参数，则默认按同名远端分支创建。
 - `gt`：支持 `new` 和 `sync` 两种模式；既能基于远端创建新分支，也能按远端重建本地分支。
 - `mr`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
-- `comp`：输出目标分支与对比分支的 GitLab Compare 链接。
+- `cmpr`：输出目标分支与对比分支的 GitLab Compare 链接。
 - `merge`：基于远端基线分支创建或重建本地目标分支，再合并另一个远端分支。
 
 独立文档：
@@ -130,7 +130,7 @@
 - `create-branch-from-remote.sh`：从指定远端分支快速拉出一个新的本地分支，且创建动作始终以远端状态为准。
 - `gt`：希望统一入口处理“新建分支”和“按远端重建分支”两类动作时使用；默认省略模式时按 `sync` 处理。
 - `mr`：已经切到源分支，只想快速生成当前分支指向目标分支的 GitLab MR 新建链接时使用。
-- `comp`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
+- `cmpr`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
 - `merge`：希望严格以远端基线分支为准创建或重建本地目标分支，再把最新来源分支合并进来时使用。
 
 ## mr
@@ -172,11 +172,11 @@
 - 当前处于 detached HEAD 时，脚本会直接失败。
 - 目前默认按 GitLab 的 MR 地址格式拼接链接。
 
-## comp
+## cmpr
 
 ### 作用
 
-`comp` 用于输出 GitLab Compare 链接。脚本会自动读取当前仓库的 `origin` 地址，转换成仓库页面地址，再拼接目标远端分支和对比分支。
+`cmpr` 用于输出 GitLab Compare 链接。脚本会自动读取当前仓库的 `origin` 地址，转换成仓库页面地址，再拼接目标远端分支和对比分支。
 
 ### 原理描述
 
@@ -185,7 +185,7 @@
 ### 用法
 
 ```bash
-./comp <目标远端分支> [对比分支]
+./cmpr <目标远端分支> [对比分支]
 ```
 
 如果省略对比分支，则默认使用当前本地分支，表示当前本地分支和目标远端分支做对比。
@@ -193,8 +193,8 @@
 ### 示例
 
 ```bash
-./comp release
-./comp release feature/order-refactor
+./cmpr release
+./cmpr release feature/order-refactor
 ```
 
 第一条命令表示输出 `release...当前分支` 的 Compare 链接，也就是当前本地分支和远程分支 `origin/release` 做对比。  
