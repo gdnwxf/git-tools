@@ -60,20 +60,13 @@ ensure_remote_branch_exists() {
   git show-ref --verify --quiet "refs/remotes/${remote_branch_ref}" || fail "远端分支 ${remote_branch_ref} 不存在"
 }
 
-# @description 校验本地目标分支不存在仅本地可见的提交，避免重置到远端后丢失提交
-# @param $1 本地分支名
-# @param $2 远端分支引用
+# @description 校验远端目标分支不存在，避免覆盖已有远端分支语义
+# @param $1 远端分支引用
 # @returns 校验失败时直接退出
-ensure_branch_has_no_local_only_commits() {
-  local branch_name="$1"
-  local remote_branch_ref="$2"
-
-  if ! git show-ref --verify --quiet "refs/heads/${branch_name}"; then
-    return
-  fi
-
-  if [[ "$(git rev-list --count "${remote_branch_ref}..${branch_name}")" -gt 0 ]]; then
-    fail "本地分支 ${branch_name} 存在未同步到 ${remote_branch_ref} 的提交，已停止执行以避免提交丢失"
+ensure_remote_branch_absent() {
+  local remote_branch_ref="$1"
+  if git show-ref --verify --quiet "refs/remotes/${remote_branch_ref}"; then
+    fail "远端目标分支 ${remote_branch_ref} 已存在，已取消执行"
   fi
 }
 
@@ -124,7 +117,9 @@ base_remote_ref="${remote_name}/${base_branch}"
 source_remote_ref="${remote_name}/${source_branch}"
 ensure_remote_branch_exists "${base_remote_ref}"
 ensure_remote_branch_exists "${source_remote_ref}"
-ensure_branch_has_no_local_only_commits "${target_branch}" "${base_remote_ref}"
+if [[ "$#" -eq 3 ]]; then
+  ensure_remote_branch_absent "${remote_name}/${target_branch}"
+fi
 
 step 3 "基于最新 ${base_remote_ref} 创建或重建本地 ${target_branch}"
 git checkout --detach "${base_remote_ref}"
