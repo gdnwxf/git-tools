@@ -23,9 +23,9 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
-  ./sync sync <本地分支名a> [远端分支名b]
-  ./sync new <本地分支名a> [远端分支名b]
-  ./sync <本地分支名a> [远端分支名b]
+  ./gt sync <本地分支名a> [远端分支名b]
+  ./gt new <本地分支名a> [远端分支名b]
+  ./gt <本地分支名a> [远端分支名b]
 
 说明:
   `sync`:

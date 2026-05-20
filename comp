@@ -15,17 +15,18 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
-  ./cmp <目标分支> [对比分支]
+  ./comp <目标远端分支> [对比分支]
 
 示例:
-  ./cmp release
-  ./cmp release feature/order-refactor
+  ./comp release
+  ./comp release feature/order-refactor
 
 说明:
   输出 GitLab Compare 链接，格式为：
-  https://<host>/<group>/<repo>/-/compare/<目标分支>..<对比分支>
+  https://<host>/<group>/<repo>/-/compare/<目标远端分支>...<对比分支>
 
-  如果省略对比分支，则默认使用当前本地分支。
+  如果省略对比分支，则默认使用当前本地分支，
+  表示当前本地分支和目标远端分支做对比。
 
 原理:
   读取 origin 远端地址并转换成仓库页面地址，
@@ -83,7 +84,7 @@ build_compare_url() {
   local compare_branch="$3"
   local raw_url=""
 
-  printf -v raw_url '%s/-/compare/%s..%s' \
+  printf -v raw_url '%s/-/compare/%s...%s' \
     "${repo_web_url}" \
     "${target_branch}" \
     "${compare_branch}"
