@@ -23,14 +23,16 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
+  ./merge <远端基线分支a> <远端来源分支b>
   ./merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 
 说明:
+  传 2 个参数时：基于最新 origin/a 创建或重建本地 a，再把最新 origin/b 合并到 a。
   基于最新 origin/a 创建或重建本地 b，再把最新 origin/c 合并到 b。
 
 原理:
-  先同步远端引用，再以 origin/a 作为可信基线创建本地 b，
-  最后把 origin/c 合并进 b，避免依赖当前本地分支状态。
+  先同步远端引用，再以远端基线分支作为可信基线创建本地目标分支，
+  最后把远端来源分支合并进目标分支，避免依赖当前本地分支状态。
 EOF
 }
 
@@ -76,8 +78,8 @@ ensure_branch_has_no_local_only_commits() {
 }
 
 base_branch="${1:-}"
-target_branch="${2:-}"
-source_branch="${3:-}"
+target_branch=""
+source_branch=""
 remote_name="origin"
 base_remote_ref=""
 source_remote_ref=""
@@ -87,12 +89,27 @@ if [[ "${base_branch}" == "-h" || "${base_branch}" == "--help" || "${base_branch
   exit 0
 fi
 
-if [[ -z "${base_branch}" || -z "${target_branch}" || -z "${source_branch}" ]]; then
+if [[ -z "${base_branch}" || -z "${2:-}" ]]; then
   print_help >&2
   exit 1
 fi
 
-if [[ "${target_branch}" == "${base_branch}" || "${target_branch}" == "${source_branch}" ]]; then
+case "$#" in
+  2)
+    target_branch="${base_branch}"
+    source_branch="$2"
+    ;;
+  3)
+    target_branch="$2"
+    source_branch="$3"
+    ;;
+  *)
+    print_help >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$#" -eq 3 && ("${target_branch}" == "${base_branch}" || "${target_branch}" == "${source_branch}") ]]; then
   fail "本地目标分支不能与远端基线分支或远端来源分支同名"
 fi
 
