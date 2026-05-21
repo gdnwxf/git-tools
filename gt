@@ -23,6 +23,7 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
+  ./gt
   ./gt sync <本地分支名a> [远端分支名b]
   ./gt new <本地分支名a> [远端分支名b]
   ./gt <本地分支名a> [远端分支名b]
@@ -32,6 +33,10 @@ print_help() {
   ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 
 说明:
+  不带参数:
+    快进同步最新 origin/<当前分支> 到当前本地分支；
+    不删除、不重建本地分支。
+
   `sync`:
     删除并重新创建本地分支 a。
     如果传了 b，则按最新 origin/b 重建；
@@ -52,10 +57,11 @@ print_help() {
     基于远端基线分支创建或重建本地目标分支，再合并远端来源分支。
 
   兼容旧用法:
-    省略模式时，默认按 `sync` 处理。
+    传入分支名但省略模式时，默认按 `sync` 处理。
 
 原理:
   先同步远端引用，再按模式执行：
+  不带参数会快进合并 origin/<当前分支>；
   `sync` 会删除并重建本地分支；
   `new` 会直接创建新的本地分支。
 EOF
@@ -378,6 +384,38 @@ run_merge() {
     "${source_remote_ref}"
 }
 
+# @description 快进同步最新 origin/<当前分支> 到当前本地分支
+# @param 无
+# @returns 同步成功时输出完成信息
+run_update_current_branch() {
+  local current_branch=""
+  local remote_name="origin"
+  local remote_branch_ref=""
+
+  ensure_git_repo
+
+  current_branch="$(git branch --show-current)"
+  if [[ -z "${current_branch}" ]]; then
+    fail "当前处于 detached HEAD，无法识别当前分支"
+  fi
+
+  step 1 "校验仓库状态与当前分支"
+  ensure_clean_worktree
+
+  step 2 "同步远端分支引用"
+  git fetch --all --prune
+
+  remote_branch_ref="${remote_name}/${current_branch}"
+  ensure_remote_branch_exists "${remote_branch_ref}"
+
+  step 3 "快进同步 ${remote_branch_ref} 到本地 ${current_branch}"
+  if ! git merge --ff-only "${remote_branch_ref}"; then
+    fail "无法快进同步 ${remote_branch_ref} 到本地 ${current_branch}，请手动处理分叉后重试"
+  fi
+
+  printf '\n完成: 已同步 %s 到本地分支 %s\n' "${remote_branch_ref}" "${current_branch}"
+}
+
 mode="${1:-}"
 target_branch=""
 remote_branch=""
@@ -387,6 +425,11 @@ temp_branch_created=0
 
 if [[ "${mode}" == "-h" || "${mode}" == "--help" || "${mode}" == "help" ]]; then
   print_help
+  exit 0
+fi
+
+if [[ "$#" -eq 0 ]]; then
+  run_update_current_branch
   exit 0
 fi
 

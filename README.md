@@ -70,21 +70,23 @@
 
 `gt` 用于统一处理多类 Git 辅助场景：
 
+- 无参数：快进同步最新 `origin/<当前分支>` 到当前本地分支，不删除、不重建本地分支
 - `new`：基于指定远端分支创建新的本地分支
 - `sync`：按指定远端分支重建本地分支；如果本地目标分支已存在，会先删除再重建
 - `cmpr`：输出 GitLab Compare 链接
 - `mr`：输出 GitLab Merge Request 新建链接
 - `merge`：基于远端基线分支创建或重建本地目标分支，再合并远端来源分支
 
-为了兼容旧用法，如果省略模式，默认按 `sync` 处理。
+为了兼容旧用法，如果传入分支名但省略模式，默认按 `sync` 处理。
 
 ### 原理描述
 
-这个脚本的核心原理是把远端 `origin/<branch>` 作为统一可信基线。执行时先同步远端引用，然后根据模式决定是“新建”还是“重建”：`new` 模式直接创建本地分支，`sync` 模式先清理旧本地分支再按远端重建。
+这个脚本的核心原理是把远端 `origin/<branch>` 作为统一可信基线。执行时先同步远端引用，然后根据模式决定动作：无参数时使用 `git merge --ff-only origin/<当前分支>` 快进同步当前分支；`new` 模式直接创建本地分支；`sync` 模式先清理旧本地分支再按远端重建。
 
 ### 用法
 
 ```bash
+./gt
 ./gt new <本地分支名a> [远端分支名b]
 ./gt sync <本地分支名a> [远端分支名b]
 ./gt <本地分支名a> [远端分支名b]
@@ -97,6 +99,7 @@
 ### 示例
 
 ```bash
+./gt
 ./gt new feature/order-refactor
 ./gt new feature/order-refactor release
 ./gt sync feature/order-refactor
@@ -107,30 +110,33 @@
 ./gt merge local feature/test release
 ```
 
-第一条命令表示新建本地 `feature/order-refactor`，基线是最新 `origin/feature/order-refactor`。  
-第二条命令表示新建本地 `feature/order-refactor`，基线是最新 `origin/release`。  
-第三条命令表示本地 `feature/order-refactor` 直接按最新 `origin/feature/order-refactor` 重建。  
-第四条命令表示本地 `feature/order-refactor` 按最新 `origin/release` 重建。  
-如果省略 `sync` 模式名，则保持旧行为，默认按重建处理。`gt cmpr`、`gt mr`、`gt merge` 分别等价于独立执行 `cmpr`、`mr`、`merge`。
+第一条命令表示快进同步最新 `origin/<当前分支>` 到当前本地分支，不删除、不重建本地分支。
+第二条命令表示新建本地 `feature/order-refactor`，基线是最新 `origin/feature/order-refactor`。
+第三条命令表示新建本地 `feature/order-refactor`，基线是最新 `origin/release`。
+第四条命令表示本地 `feature/order-refactor` 直接按最新 `origin/feature/order-refactor` 重建。
+第五条命令表示本地 `feature/order-refactor` 按最新 `origin/release` 重建。
+如果传入分支名但省略 `sync` 模式名，则保持旧行为，默认按重建处理。`gt cmpr`、`gt mr`、`gt merge` 分别等价于独立执行 `cmpr`、`mr`、`merge`。
 
 ### 执行流程
 
 1. 校验当前目录是否为 Git 仓库。
 2. 校验已跟踪文件没有未提交改动。
 3. 执行 `git fetch --all --prune` 同步远端引用。
-4. 解析远端基线分支：如果传了 `b`，使用 `origin/b`；如果只传了 `a`，使用 `origin/a`。
-5. 校验目标远端分支存在。
-6. 如果是 `new` 模式，校验本地目标分支 `a` 不存在，然后基于目标远端分支创建本地分支。
-7. 如果是 `sync` 模式，先校验本地目标分支 `a` 不存在仅本地可见、尚未同步到目标远端分支的提交。
-8. 如果是 `sync` 模式且当前正位于本地目标分支 `a`，脚本会先创建一个形如 `date_YYYYMMDD_HHMMSS` 的临时分支，避免删除当前分支失败。
-9. 如果是 `sync` 模式且本地存在目标分支 `a`，则强制删除该本地分支。
-10. 基于目标远端分支创建或重建并切换到本地目标分支 `a`。
-11. 如果本次创建过临时分支，则在成功切回目标分支后删除该临时分支。
+4. 如果不带参数，读取当前分支，校验 `origin/<当前分支>` 存在，然后执行 `git merge --ff-only origin/<当前分支>`。
+5. 如果是 `new` 或 `sync` 模式，解析远端基线分支：如果传了 `b`，使用 `origin/b`；如果只传了 `a`，使用 `origin/a`。
+6. 校验目标远端分支存在。
+7. 如果是 `new` 模式，校验本地目标分支 `a` 不存在，然后基于目标远端分支创建本地分支。
+8. 如果是 `sync` 模式，先校验本地目标分支 `a` 不存在仅本地可见、尚未同步到目标远端分支的提交。
+9. 如果是 `sync` 模式且当前正位于本地目标分支 `a`，脚本会先创建一个形如 `date_YYYYMMDD_HHMMSS` 的临时分支，避免删除当前分支失败。
+10. 如果是 `sync` 模式且本地存在目标分支 `a`，则强制删除该本地分支。
+11. 基于目标远端分支创建或重建并切换到本地目标分支 `a`。
+12. 如果本次创建过临时分支，则在成功切回目标分支后删除该临时分支。
 
 ### 注意事项
 
-- 参数不能为空。
+- 不带参数时只执行快进同步；如果当前本地分支和远端分支已经分叉，脚本会失败并要求手动处理。
 - `new` 模式只负责创建新分支，不会覆盖已存在的本地目标分支。
+- `sync` 模式会删除并重建本地目标分支；它和不带参数的快进同步不是同一个动作。
 - `sync` 模式在当前处于 detached HEAD 时会直接失败。
 - `sync` 模式会先校验本地目标分支是否存在未同步到目标远端分支的提交，避免删除后丢失本地独有提交。
 - `sync` 模式创建的临时分支只用于避开当前分支删除限制；成功重建并切回目标分支后会自动删除。
@@ -139,7 +145,7 @@
 ## 建议使用场景
 
 - `create-branch-from-remote.sh`：从指定远端分支快速拉出一个新的本地分支，且创建动作始终以远端状态为准。
-- `gt`：希望统一入口处理“新建分支”和“按远端重建分支”两类动作时使用；默认省略模式时按 `sync` 处理。
+- `gt`：不带参数时用于快进同步当前分支；传入分支名但省略模式时按 `sync` 重建处理；也可统一入口处理“新建分支”和“按远端重建分支”。
 - `mr` 或 `gt mr`：已经切到源分支，只想快速生成当前分支指向目标分支的 GitLab MR 新建链接时使用。
 - `cmpr` 或 `gt cmpr`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
 - `merge` 或 `gt merge`：希望严格以远端基线分支为准创建或重建本地目标分支，再把最新来源分支合并进来时使用。
