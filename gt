@@ -29,6 +29,7 @@ print_help() {
   ./gt <本地分支名a> [远端分支名b]
   ./gt cmpr <目标远端分支> [对比分支]
   ./gt mr <目标分支>
+  ./gt mr <源分支> <目标分支>
   ./gt merge <远端基线分支a> <远端来源分支b>
   ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 
@@ -52,6 +53,7 @@ print_help() {
 
   `mr`:
     输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+    如果显式传入源分支，则输出指定源分支到目标分支的 MR 新建链接。
 
   `merge`:
     基于远端基线分支创建或重建本地目标分支，再合并远端来源分支。
@@ -95,9 +97,15 @@ print_mr_help() {
   cat <<'EOF'
 用法:
   ./gt mr <目标分支>
+  ./gt mr <源分支> <目标分支>
+
+示例:
+  ./gt mr release
+  ./gt mr feature/order-refactor release
 
 说明:
   输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+  如果显式传入源分支，则输出指定源分支到目标分支的 MR 新建链接。
 EOF
 }
 
@@ -284,11 +292,11 @@ build_merge_request_url() {
 }
 
 # @description 执行 GitLab MR 链接输出子命令
-# @param $@ 目标分支
+# @param $@ 目标分支，或源分支和目标分支
 # @returns 输出 MR 链接
 run_mr() {
+  local source_branch=""
   local target_branch="${1:-}"
-  local current_branch=""
   local origin_url=""
   local repo_web_url=""
 
@@ -297,21 +305,29 @@ run_mr() {
     exit 0
   fi
 
-  if [[ -z "${target_branch}" || "$#" -gt 1 ]]; then
+  if [[ -z "${target_branch}" || "$#" -gt 2 ]]; then
     print_mr_help >&2
     exit 1
   fi
 
   ensure_git_repo
 
-  current_branch="$(git branch --show-current)"
-  if [[ -z "${current_branch}" ]]; then
-    fail "当前处于 detached HEAD，无法识别源分支"
-  fi
+  case "$#" in
+    1)
+      source_branch="$(git branch --show-current)"
+      if [[ -z "${source_branch}" ]]; then
+        fail "当前处于 detached HEAD，无法识别默认源分支，请显式传入源分支"
+      fi
+      ;;
+    2)
+      source_branch="$1"
+      target_branch="$2"
+      ;;
+  esac
 
   origin_url="$(get_origin_url)"
   repo_web_url="$(resolve_repo_web_url "${origin_url}")"
-  build_merge_request_url "${repo_web_url}" "${current_branch}" "${target_branch}"
+  build_merge_request_url "${repo_web_url}" "${source_branch}" "${target_branch}"
 }
 
 # @description 执行远端基线创建或重建本地目标分支并合并远端来源分支

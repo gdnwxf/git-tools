@@ -16,9 +16,15 @@ print_help() {
   cat <<'EOF'
 用法:
   ./mr <目标分支>
+  ./mr <源分支> <目标分支>
+
+示例:
+  ./mr release
+  ./mr feature/order-refactor release
 
 说明:
   输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+  如果显式传入源分支，则输出指定源分支到目标分支的 MR 新建链接。
 
 原理:
   读取 origin 远端地址并转换成仓库页面地址，
@@ -84,6 +90,7 @@ build_merge_request_url() {
   printf '%s\n' "${raw_url}"
 }
 
+source_branch=""
 target_branch="${1:-}"
 
 if [[ "${target_branch}" == "-h" || "${target_branch}" == "--help" || "${target_branch}" == "help" ]]; then
@@ -91,18 +98,26 @@ if [[ "${target_branch}" == "-h" || "${target_branch}" == "--help" || "${target_
   exit 0
 fi
 
-if [[ -z "${target_branch}" || "$#" -gt 1 ]]; then
+if [[ -z "${target_branch}" || "$#" -gt 2 ]]; then
   print_help >&2
   exit 1
 fi
 
 ensure_git_repo
 
-current_branch="$(git branch --show-current)"
-if [[ -z "${current_branch}" ]]; then
-  fail "当前处于 detached HEAD，无法识别源分支"
-fi
+case "$#" in
+  1)
+    source_branch="$(git branch --show-current)"
+    if [[ -z "${source_branch}" ]]; then
+      fail "当前处于 detached HEAD，无法识别默认源分支，请显式传入源分支"
+    fi
+    ;;
+  2)
+    source_branch="$1"
+    target_branch="$2"
+    ;;
+esac
 
 origin_url="$(get_origin_url)"
 repo_web_url="$(resolve_repo_web_url "${origin_url}")"
-build_merge_request_url "${repo_web_url}" "${current_branch}" "${target_branch}"
+build_merge_request_url "${repo_web_url}" "${source_branch}" "${target_branch}"

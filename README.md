@@ -92,6 +92,7 @@
 ./gt <本地分支名a> [远端分支名b]
 ./gt cmpr <目标远端分支> [对比分支]
 ./gt mr <目标分支>
+./gt mr <源分支> <目标分支>
 ./gt merge <远端基线分支a> <远端来源分支b>
 ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ```
@@ -106,6 +107,7 @@
 ./gt sync feature/order-refactor release
 ./gt cmpr release
 ./gt mr release
+./gt mr feature/order-refactor release
 ./gt merge local release
 ./gt merge local feature/test release
 ```
@@ -116,6 +118,7 @@
 第四条命令表示本地 `feature/order-refactor` 直接按最新 `origin/feature/order-refactor` 重建。
 第五条命令表示本地 `feature/order-refactor` 按最新 `origin/release` 重建。
 如果传入分支名但省略 `sync` 模式名，则保持旧行为，默认按重建处理。`gt cmpr`、`gt mr`、`gt merge` 分别等价于独立执行 `cmpr`、`mr`、`merge`。
+`gt mr feature/order-refactor release` 表示直接生成源分支 `feature/order-refactor` 指向目标分支 `release` 的 MR 新建链接。
 
 ### 执行流程
 
@@ -146,7 +149,7 @@
 
 - `create-branch-from-remote.sh`：从指定远端分支快速拉出一个新的本地分支，且创建动作始终以远端状态为准。
 - `gt`：不带参数时用于快进同步当前分支；传入分支名但省略模式时按 `sync` 重建处理；也可统一入口处理“新建分支”和“按远端重建分支”。
-- `mr` 或 `gt mr`：已经切到源分支，只想快速生成当前分支指向目标分支的 GitLab MR 新建链接时使用。
+- `mr` 或 `gt mr`：想快速生成当前分支或指定源分支指向目标分支的 GitLab MR 新建链接时使用。
 - `cmpr` 或 `gt cmpr`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
 - `merge` 或 `gt merge`：希望严格以远端基线分支为准创建或重建本地目标分支，再把最新来源分支合并进来时使用。
 
@@ -154,41 +157,47 @@
 
 ### 作用
 
-`mr` 用于输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+`mr` 用于输出当前分支到目标分支的 GitLab Merge Request 新建链接；也支持显式指定源分支和目标分支。
 
 ### 原理描述
 
-这个脚本的核心原理是读取当前仓库的 `origin` 远端地址，转换成浏览器可访问的仓库页面地址，再拼接当前分支名和目标分支名，生成一个可直接打开的 MR 创建链接。
+这个脚本的核心原理是读取当前仓库的 `origin` 远端地址，转换成浏览器可访问的仓库页面地址，再拼接源分支名和目标分支名，生成一个可直接打开的 MR 创建链接。只传目标分支时，源分支默认使用当前本地分支。
 
 ### 用法
 
 ```bash
 ./mr <目标分支>
+./mr <源分支> <目标分支>
 ./gt mr <目标分支>
+./gt mr <源分支> <目标分支>
 ```
 
 ### 示例
 
 ```bash
 ./mr release
+./mr feature/order-refactor release
 ./gt mr release
+./gt mr feature/order-refactor release
 ```
 
-这条命令表示基于当前所在本地分支，生成一个目标分支为 `release` 的 GitLab MR 新建链接。
+`./mr release` 和 `./gt mr release` 表示基于当前所在本地分支，生成一个目标分支为 `release` 的 GitLab MR 新建链接。
+
+`./mr feature/order-refactor release` 和 `./gt mr feature/order-refactor release` 表示直接生成源分支 `feature/order-refactor` 指向目标分支 `release` 的 GitLab MR 新建链接。
 
 ### 执行流程
 
 1. 校验当前目录是否为 Git 仓库。
-2. 校验当前不是 detached HEAD，确保可以识别当前源分支。
+2. 如果没有显式传入源分支，校验当前不是 detached HEAD，确保可以识别默认源分支。
 3. 读取 `origin` 远端地址。
 4. 把远端地址转换为仓库页面地址。
-5. 基于当前分支和目标分支拼接 MR 新建链接并输出。
+5. 基于源分支和目标分支拼接 MR 新建链接并输出。
 
 ### 注意事项
 
 - 参数不能为空。
 - 该脚本只输出链接，不会执行 `git push`、`git merge` 或创建 MR。
-- 当前处于 detached HEAD 时，脚本会直接失败。
+- 省略源分支且当前处于 detached HEAD 时，脚本会直接失败；显式传入源分支时不依赖当前分支。
 - 目前默认按 GitLab 的 MR 地址格式拼接链接。
 
 ## cmpr
