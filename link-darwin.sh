@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fail() {
-  printf '错误: %s\n' "$1" >&2
+  printf 'error: %s\n' "$1" >&2
   exit 1
 }
 
@@ -11,15 +11,15 @@ link_one() {
   local source_path="${SCRIPT_DIR}/${name}"
   local target_path="${TOOLS_DIR}/${name}"
 
-  [[ -f "${source_path}" ]] || fail "未找到源文件: ${source_path}"
+  [[ -f "${source_path}" ]] || fail "missing source file: ${source_path}"
 
   if [[ -e "${target_path}" || -L "${target_path}" ]]; then
-    printf '已存在，跳过: %s\n' "${target_path}"
+    printf 'exists, skip: %s\n' "${target_path}"
     return
   fi
 
   ln -s "${source_path}" "${target_path}"
-  printf '已链接: %s -> %s\n' "${target_path}" "${source_path}"
+  printf 'linked: %s -> %s\n' "${target_path}" "${source_path}"
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,4 +32,4 @@ for tool in "${TOOLS[@]}"; do
   link_one "${tool}"
 done
 
-printf '完成: 已更新 %s 下的工具链接\n' "${TOOLS_DIR}"
+printf 'done: tool links under %s are ready\n' "${TOOLS_DIR}"
