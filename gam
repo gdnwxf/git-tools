@@ -39,6 +39,32 @@ PROJECT_ID="$(jq -er --arg project_path "${PROJECT_PATH}" '.project_id_mapping[$
 API_BASE="${GL_HOST}/api/v4/projects/${PROJECT_ID}"
 HEADER=("-H" "PRIVATE-TOKEN:${GL_TOKEN}" "-H" "Content-Type:application/json")
 
+api_json_request() {
+    local method="$1"
+    local url="$2"
+    local data="${3:-}"
+    local response http_status response_body
+
+    if [[ -n "${data}" ]];then
+        response=$(curl -sS -w $'\n%{http_code}' -X "${method}" "${url}" "${HEADER[@]}" -d "${data}") || fail "GitLab API请求失败：${url}"
+    else
+        response=$(curl -sS -w $'\n%{http_code}' -X "${method}" "${url}" "${HEADER[@]}") || fail "GitLab API请求失败：${url}"
+    fi
+
+    http_status="${response##*$'\n'}"
+    response_body="${response%$'\n'${http_status}}"
+
+    if [[ ! "${http_status}" =~ ^2[0-9][0-9]$ ]];then
+        fail "GitLab API返回失败(${http_status})：${response_body}"
+    fi
+
+    if ! printf '%s\n' "${response_body}" | jq -e . >/dev/null 2>&1;then
+        fail "GitLab API返回非JSON(${http_status})：${response_body}"
+    fi
+
+    printf '%s\n' "${response_body}"
+}
+
 echo "===== 1. 创建MergeRequest：${SOURCE_BRANCH} → ${TARGET_BRANCH} ====="
 # 创建MR
 CREATE_MR_BODY=$(jq -n \
@@ -47,7 +73,7 @@ CREATE_MR_BODY=$(jq -n \
 --arg title "$MR_TITLE" \
 '{source_branch:$sb,target_branch:$tb,title:$title}')
 
-CREATE_RET=$(curl -s -X POST "${API_BASE}/merge_requests" "${HEADER[@]}" -d "${CREATE_MR_BODY}")
+CREATE_RET=$(api_json_request POST "${API_BASE}/merge_requests" "${CREATE_MR_BODY}")
 
 # 校验MR创建是否成功
 if echo "$CREATE_RET" | jq -e '.iid == null' >/dev/null;then
@@ -63,7 +89,7 @@ has_calc_done=0
 
 while [ $poll_count -lt $MAX_POLL ];do
     poll_count=$((poll_count+1))
-    MR_INFO=$(curl -s "${API_BASE}/merge_requests/${MR_IID}" "${HEADER[@]}")
+    MR_INFO=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}")
     MERGE_STATUS=$(echo "$MR_INFO" | jq -r '.merge_status')
     HAS_CONFLICT=$(echo "$MR_INFO" | jq -r '.has_conflicts')
 
@@ -85,7 +111,7 @@ echo -e "\n===== 3. 冲突判定 ====="
 if [ "${HAS_CONFLICT}" = "true" ] || [ "${MERGE_STATUS}" = "cannot_be_merged" ];then
     echo "❌ 检测到代码存在合并冲突，无法自动合并"
     # 拉取冲突文件列表
-    CONFLICT_RET=$(curl -s "${API_BASE}/merge_requests/${MR_IID}/conflicts" "${HEADER[@]}")
+    CONFLICT_RET=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}/conflicts")
     echo "冲突文件清单："
     echo "$CONFLICT_RET" | jq -r '.conflicts[].new_path'
     exit 3
@@ -100,7 +126,7 @@ echo "✅ 无代码冲突，准备执行自动合并"
 echo -e "\n===== 4. 调用API执行MR合并 ====="
 # 执行合并
 MERGE_BODY=$(jq -n --arg del "$AUTO_DEL_SOURCE" '{should_remove_source_branch:$del}')
-MERGE_RET=$(curl -s -X PUT "${API_BASE}/merge_requests/${MR_IID}/merge" "${HEADER[@]}" -d "${MERGE_BODY}")
+MERGE_RET=$(api_json_request PUT "${API_BASE}/merge_requests/${MR_IID}/merge" "${MERGE_BODY}")
 
 if echo "$MERGE_RET" | jq -e '.state!="merged"' >/dev/null;then
     echo "❌ 合并失败，返回信息：$MERGE_RET"
