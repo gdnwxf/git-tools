@@ -1,0 +1,111 @@
+#!/bin/bash
+set -euo pipefail
+
+########################## 【配置区 按需修改】##########################
+SLEEP_INTERVAL=1                   # 轮询间隔(秒)
+MAX_POLL=15                        # 最大轮询次数，超过放弃
+AUTO_DEL_SOURCE=false              # 合并后是否删除源分支 true/false
+#######################################################################
+
+usage() {
+    echo "用法: $(basename "$0") <source_branch> <target_branch>" >&2
+}
+
+fail() {
+    echo "错误: $1" >&2
+    exit 1
+}
+
+if [[ $# -ne 2 ]];then
+    usage
+    fail "请传入源分支和目标分支"
+fi
+
+SOURCE_BRANCH="$1"
+TARGET_BRANCH="$2"
+MR_TITLE="【自动脚本】${SOURCE_BRANCH}合并至${TARGET_BRANCH}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/git_config.json"
+
+[[ -f "${CONFIG_FILE}" ]] || fail "未找到配置文件: ${CONFIG_FILE}"
+
+GL_HOST="$(jq -er '(.gl_host // .GL_HOST) | select(type=="string" and length > 0)' "${CONFIG_FILE}")" || fail "git_config.json 缺少有效配置: gl_host"
+GL_TOKEN="$(jq -er '(.gl_token // .GL_TOKEN) | select(type=="string" and length > 0)' "${CONFIG_FILE}")" || fail "git_config.json 缺少有效配置: gl_token"
+REMOTE_URL="$(git config --get remote.origin.url)" || fail "未找到当前仓库 remote.origin.url"
+PROJECT_PATH="$(printf '%s\n' "${REMOTE_URL}" | sed -E 's#^https?://[^/]+/##; s#^ssh://git@[^/]+/##; s#^git@[^:]+:##; s#\.git$##')"
+PROJECT_ID="$(jq -er --arg project_path "${PROJECT_PATH}" '.project_id_mapping[$project_path] | select((type=="number") or (type=="string" and length > 0))' "${CONFIG_FILE}")" || fail "git_config.json project_id_mapping 缺少当前项目: ${PROJECT_PATH}"
+
+API_BASE="${GL_HOST}/api/v4/projects/${PROJECT_ID}"
+HEADER=("-H" "PRIVATE-TOKEN:${GL_TOKEN}" "-H" "Content-Type:application/json")
+
+echo "===== 1. 创建MergeRequest：${SOURCE_BRANCH} → ${TARGET_BRANCH} ====="
+# 创建MR
+CREATE_MR_BODY=$(jq -n \
+--arg sb "$SOURCE_BRANCH" \
+--arg tb "$TARGET_BRANCH" \
+--arg title "$MR_TITLE" \
+'{source_branch:$sb,target_branch:$tb,title:$title}')
+
+CREATE_RET=$(curl -s -X POST "${API_BASE}/merge_requests" "${HEADER[@]}" -d "${CREATE_MR_BODY}")
+
+# 校验MR创建是否成功
+if echo "$CREATE_RET" | jq -e '.iid == null' >/dev/null;then
+    echo "MR创建失败！返回：$CREATE_RET"
+    exit 1
+fi
+MR_IID=$(echo "$CREATE_RET" | jq -r '.iid')
+echo "✅ MR创建成功，MR_IID: $MR_IID"
+
+echo -e "\n===== 2. 轮询等待GitLab计算合并状态(冲突检测) ====="
+poll_count=0
+has_calc_done=0
+
+while [ $poll_count -lt $MAX_POLL ];do
+    poll_count=$((poll_count+1))
+    MR_INFO=$(curl -s "${API_BASE}/merge_requests/${MR_IID}" "${HEADER[@]}")
+    MERGE_STATUS=$(echo "$MR_INFO" | jq -r '.merge_status')
+    HAS_CONFLICT=$(echo "$MR_INFO" | jq -r '.has_conflicts')
+
+    echo "[${poll_count}/${MAX_POLL}] 当前merge_status:${MERGE_STATUS}, has_conflict:${HAS_CONFLICT}"
+
+    if [ "${MERGE_STATUS}" != "unchecked" ];then
+        has_calc_done=1
+        break
+    fi
+    sleep ${SLEEP_INTERVAL}
+done
+
+if [ $has_calc_done -eq 0 ];then
+    echo "❌ 超时：多次轮询GitLab未完成合并状态计算，终止"
+    exit 2
+fi
+
+echo -e "\n===== 3. 冲突判定 ====="
+if [ "${HAS_CONFLICT}" = "true" ] || [ "${MERGE_STATUS}" = "cannot_be_merged" ];then
+    echo "❌ 检测到代码存在合并冲突，无法自动合并"
+    # 拉取冲突文件列表
+    CONFLICT_RET=$(curl -s "${API_BASE}/merge_requests/${MR_IID}/conflicts" "${HEADER[@]}")
+    echo "冲突文件清单："
+    echo "$CONFLICT_RET" | jq -r '.conflicts[].new_path'
+    exit 3
+fi
+
+if [ "${MERGE_STATUS}" != "can_be_merged" ];then
+    echo "⚠️ 不可合并(非代码冲突：审批未过/流水线失败等)，merge_status=${MERGE_STATUS}"
+    exit 4
+fi
+
+echo "✅ 无代码冲突，准备执行自动合并"
+echo -e "\n===== 4. 调用API执行MR合并 ====="
+# 执行合并
+MERGE_BODY=$(jq -n --arg del "$AUTO_DEL_SOURCE" '{should_remove_source_branch:$del}')
+MERGE_RET=$(curl -s -X PUT "${API_BASE}/merge_requests/${MR_IID}/merge" "${HEADER[@]}" -d "${MERGE_BODY}")
+
+if echo "$MERGE_RET" | jq -e '.state!="merged"' >/dev/null;then
+    echo "❌ 合并失败，返回信息：$MERGE_RET"
+    exit 5
+fi
+
+echo "🎉 MR#${MR_IID} 自动合并完成！"
+exit 0

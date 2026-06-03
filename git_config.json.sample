@@ -1,0 +1,17 @@
+{
+  "gl_host": "https://gl.xxxxx.com",
+  "gl_token": "xxxxxxx",
+  "project_id_mapping": {
+    "backend/come-external": 23,
+    "backend/come-user": 12,
+    "backend/come-wallet": 20,
+    "backend/admin": 6,
+    "backend/smallgame": 71,
+    "backend/come-activity": 21,
+    "backend/come-pay": 26,
+    "backend/come-member": 38,
+    "backend/come-hall": 24,
+    "backend/come-message": 31,
+    "go-zero/go-common": 9
+  }
+}
