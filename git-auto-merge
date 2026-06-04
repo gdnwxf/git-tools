@@ -191,7 +191,6 @@ fi
 MR_IID=$(echo "$CREATE_RET" | jq -r '.iid')
 MR_URL=$(echo "$CREATE_RET" | jq -r '.web_url // empty')
 echo "✅ MR创建成功，MR_IID: $MR_IID"
-print_mr_url
 
 echo -e "\n===== 2. 轮询等待GitLab计算合并状态(冲突检测) ====="
 poll_count=0
