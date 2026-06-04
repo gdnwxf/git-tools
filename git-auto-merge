@@ -126,6 +126,38 @@ print_mr_url() {
     fi
 }
 
+print_conflict_files_if_available() {
+    local url="${API_BASE}/merge_requests/${MR_IID}/conflicts"
+    local response http_status response_body
+
+    response=$(curl -sS -w $'\n%{http_code}' -X GET "${url}" "${TOKEN_HEADER[@]}") || {
+        echo "冲突文件清单查询失败，请打开MR页面查看冲突详情"
+        return
+    }
+
+    http_status="${response##*$'\n'}"
+    response_body="${response%$'\n'${http_status}}"
+
+    if [[ ! "${http_status}" =~ ^2[0-9][0-9]$ ]];then
+        echo "冲突文件清单查询失败(${http_status})，请打开MR页面查看冲突详情"
+        if printf '%s\n' "${response_body}" | jq -e . >/dev/null 2>&1;then
+            echo "返回: $(printf '%s\n' "${response_body}" | jq -c .)"
+        else
+            echo "返回: ${response_body}"
+        fi
+        return
+    fi
+
+    if ! printf '%s\n' "${response_body}" | jq -e . >/dev/null 2>&1;then
+        echo "冲突文件清单返回非JSON，请打开MR页面查看冲突详情"
+        echo "返回: ${response_body}"
+        return
+    fi
+
+    echo "冲突文件清单："
+    printf '%s\n' "${response_body}" | jq -r '.conflicts[].new_path'
+}
+
 ensure_gitlab_branch_exists() {
     local branch_name="$1"
     local encoded_branch
@@ -227,10 +259,7 @@ fi
 echo -e "\n===== 3. 冲突判定 ====="
 if [ "${HAS_CONFLICT}" = "true" ] || [ "${DETAIL_MERGE_STATUS}" = "conflict" ];then
     echo "❌ 检测到代码存在合并冲突，无法自动合并"
-    # 拉取冲突文件列表
-    CONFLICT_RET=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}/conflicts" "" "查询MergeRequest冲突")
-    echo "冲突文件清单："
-    echo "$CONFLICT_RET" | jq -r '.conflicts[].new_path'
+    print_conflict_files_if_available
     print_mr_url
     exit 3
 fi
