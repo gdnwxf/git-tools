@@ -23,7 +23,7 @@ fi
 
 SOURCE_BRANCH="$1"
 TARGET_BRANCH="$2"
-MR_TITLE="【自动脚本】${SOURCE_BRANCH}合并至${TARGET_BRANCH}"
+MR_TITLE="[auto] ${SOURCE_BRANCH} to ${TARGET_BRANCH}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/git_config.json"
@@ -35,27 +35,46 @@ GL_TOKEN="$(jq -er '(.gl_token // .GL_TOKEN) | select(type=="string" and length 
 REMOTE_URL="$(git config --get remote.origin.url)" || fail "未找到当前仓库 remote.origin.url"
 PROJECT_PATH="$(printf '%s\n' "${REMOTE_URL}" | sed -E 's#^https?://[^/]+/##; s#^ssh://git@[^/]+/##; s#^git@[^:]+:##; s#\.git$##')"
 PROJECT_ID="$(jq -er --arg project_path "${PROJECT_PATH}" '.project_id_mapping[$project_path] | select((type=="number") or (type=="string" and length > 0))' "${CONFIG_FILE}")" || fail "git_config.json project_id_mapping 缺少当前项目: ${PROJECT_PATH}"
+TOKEN_HEADER=("-H" "PRIVATE-TOKEN:${GL_TOKEN}")
+JSON_HEADER=("${TOKEN_HEADER[@]}" "-H" "Content-Type:application/json")
 
-API_BASE="${GL_HOST}/api/v4/projects/${PROJECT_ID}"
-HEADER=("-H" "PRIVATE-TOKEN:${GL_TOKEN}" "-H" "Content-Type:application/json")
+urlencode() {
+    jq -nr --arg value "$1" '$value | @uri'
+}
+
+PROJECT_ID_ENCODED="$(urlencode "${PROJECT_ID}")"
+API_BASE="${GL_HOST}/api/v4/projects/${PROJECT_ID_ENCODED}"
 
 api_json_request() {
     local method="$1"
     local url="$2"
     local data="${3:-}"
+    local description="${4:-GitLab API请求}"
     local response http_status response_body
 
     if [[ -n "${data}" ]];then
-        response=$(curl -sS -w $'\n%{http_code}' -X "${method}" "${url}" "${HEADER[@]}" -d "${data}") || fail "GitLab API请求失败：${url}"
+        response=$(curl -sS -w $'\n%{http_code}' -X "${method}" "${url}" "${JSON_HEADER[@]}" -d "${data}") || fail "GitLab API请求失败：${url}"
     else
-        response=$(curl -sS -w $'\n%{http_code}' -X "${method}" "${url}" "${HEADER[@]}") || fail "GitLab API请求失败：${url}"
+        response=$(curl -sS -w $'\n%{http_code}' -X "${method}" "${url}" "${TOKEN_HEADER[@]}") || fail "GitLab API请求失败：${url}"
     fi
 
     http_status="${response##*$'\n'}"
     response_body="${response%$'\n'${http_status}}"
 
     if [[ ! "${http_status}" =~ ^2[0-9][0-9]$ ]];then
-        fail "GitLab API返回失败(${http_status})：${response_body}"
+        {
+            echo "错误: ${description}失败(${http_status})"
+            echo "请求: ${method} ${url}"
+            if [[ -n "${data}" ]];then
+                echo "请求体: ${data}"
+            fi
+            if printf '%s\n' "${response_body}" | jq -e . >/dev/null 2>&1;then
+                echo "返回: $(printf '%s\n' "${response_body}" | jq -c .)"
+            else
+                echo "返回: ${response_body}"
+            fi
+        } >&2
+        exit 1
     fi
 
     if ! printf '%s\n' "${response_body}" | jq -e . >/dev/null 2>&1;then
@@ -65,15 +84,98 @@ api_json_request() {
     printf '%s\n' "${response_body}"
 }
 
-echo "===== 1. 创建MergeRequest：${SOURCE_BRANCH} → ${TARGET_BRANCH} ====="
-# 创建MR
-CREATE_MR_BODY=$(jq -n \
---arg sb "$SOURCE_BRANCH" \
---arg tb "$TARGET_BRANCH" \
---arg title "$MR_TITLE" \
-'{source_branch:$sb,target_branch:$tb,title:$title}')
+api_form_request() {
+    local method="$1"
+    local url="$2"
+    local description="$3"
+    shift 3
+    local response http_status response_body field
 
-CREATE_RET=$(api_json_request POST "${API_BASE}/merge_requests" "${CREATE_MR_BODY}")
+    response=$(curl -sS -w $'\n%{http_code}' -X "${method}" "${url}" "${TOKEN_HEADER[@]}" "$@") || fail "GitLab API请求失败：${url}"
+
+    http_status="${response##*$'\n'}"
+    response_body="${response%$'\n'${http_status}}"
+
+    if [[ ! "${http_status}" =~ ^2[0-9][0-9]$ ]];then
+        {
+            echo "错误: ${description}失败(${http_status})"
+            echo "请求: ${method} ${url}"
+            echo "请求参数:"
+            for field in "$@";do
+                echo "  ${field}"
+            done
+            if printf '%s\n' "${response_body}" | jq -e . >/dev/null 2>&1;then
+                echo "返回: $(printf '%s\n' "${response_body}" | jq -c .)"
+            else
+                echo "返回: ${response_body}"
+            fi
+        } >&2
+        exit 1
+    fi
+
+    if ! printf '%s\n' "${response_body}" | jq -e . >/dev/null 2>&1;then
+        fail "GitLab API返回非JSON(${http_status})：${response_body}"
+    fi
+
+    printf '%s\n' "${response_body}"
+}
+
+ensure_gitlab_branch_exists() {
+    local branch_name="$1"
+    local encoded_branch
+
+    encoded_branch="$(urlencode "${branch_name}")"
+    api_json_request GET "${API_BASE}/repository/branches/${encoded_branch}" "" "校验远端分支 ${branch_name}" >/dev/null
+}
+
+ensure_no_open_merge_request() {
+    local source_branch="$1"
+    local target_branch="$2"
+    local encoded_source encoded_target open_mrs existing_iid existing_url
+
+    encoded_source="$(urlencode "${source_branch}")"
+    encoded_target="$(urlencode "${target_branch}")"
+    open_mrs=$(api_json_request GET "${API_BASE}/merge_requests?state=opened&source_branch=${encoded_source}&target_branch=${encoded_target}" "" "查询已有MergeRequest")
+
+    if [[ "$(printf '%s\n' "${open_mrs}" | jq 'length')" -gt 0 ]];then
+        existing_iid="$(printf '%s\n' "${open_mrs}" | jq -r '.[0].iid')"
+        existing_url="$(printf '%s\n' "${open_mrs}" | jq -r '.[0].web_url // empty')"
+        fail "已存在打开状态的MergeRequest：!${existing_iid} ${existing_url}"
+    fi
+}
+
+ensure_merge_request_has_changes() {
+    local source_branch="$1"
+    local target_branch="$2"
+    local encoded_source encoded_target compare_ret commit_count diff_count
+
+    encoded_source="$(urlencode "${source_branch}")"
+    encoded_target="$(urlencode "${target_branch}")"
+    compare_ret=$(api_json_request GET "${API_BASE}/repository/compare?from=${encoded_target}&to=${encoded_source}" "" "比较分支 ${source_branch} -> ${target_branch}")
+    commit_count="$(printf '%s\n' "${compare_ret}" | jq '.commits | length')"
+    diff_count="$(printf '%s\n' "${compare_ret}" | jq '.diffs | length')"
+
+    if [[ "${commit_count}" -eq 0 && "${diff_count}" -eq 0 ]];then
+        fail "源分支 ${source_branch} 相对目标分支 ${target_branch} 没有可创建MR的提交差异"
+    fi
+}
+
+echo "===== 1. 创建MergeRequest：${SOURCE_BRANCH} → ${TARGET_BRANCH} ====="
+if [[ "${SOURCE_BRANCH}" == "${TARGET_BRANCH}" ]];then
+    fail "源分支和目标分支不能相同: ${SOURCE_BRANCH}"
+fi
+
+echo "校验源分支和目标分支是否存在..."
+ensure_gitlab_branch_exists "${SOURCE_BRANCH}"
+ensure_gitlab_branch_exists "${TARGET_BRANCH}"
+ensure_no_open_merge_request "${SOURCE_BRANCH}" "${TARGET_BRANCH}"
+ensure_merge_request_has_changes "${SOURCE_BRANCH}" "${TARGET_BRANCH}"
+
+# 创建MR。使用表单参数提交，兼容老 GitLab 和不接受 JSON body 的网关。
+CREATE_RET=$(api_form_request POST "${API_BASE}/merge_requests" "创建MergeRequest" \
+    --data-urlencode "source_branch=${SOURCE_BRANCH}" \
+    --data-urlencode "target_branch=${TARGET_BRANCH}" \
+    --data-urlencode "title=${MR_TITLE}")
 
 # 校验MR创建是否成功
 if echo "$CREATE_RET" | jq -e '.iid == null' >/dev/null;then
@@ -89,7 +191,7 @@ has_calc_done=0
 
 while [ $poll_count -lt $MAX_POLL ];do
     poll_count=$((poll_count+1))
-    MR_INFO=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}")
+    MR_INFO=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}" "" "查询MergeRequest状态")
     MERGE_STATUS=$(echo "$MR_INFO" | jq -r '.merge_status')
     HAS_CONFLICT=$(echo "$MR_INFO" | jq -r '.has_conflicts')
 
@@ -111,7 +213,7 @@ echo -e "\n===== 3. 冲突判定 ====="
 if [ "${HAS_CONFLICT}" = "true" ] || [ "${MERGE_STATUS}" = "cannot_be_merged" ];then
     echo "❌ 检测到代码存在合并冲突，无法自动合并"
     # 拉取冲突文件列表
-    CONFLICT_RET=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}/conflicts")
+    CONFLICT_RET=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}/conflicts" "" "查询MergeRequest冲突")
     echo "冲突文件清单："
     echo "$CONFLICT_RET" | jq -r '.conflicts[].new_path'
     exit 3
@@ -125,8 +227,8 @@ fi
 echo "✅ 无代码冲突，准备执行自动合并"
 echo -e "\n===== 4. 调用API执行MR合并 ====="
 # 执行合并
-MERGE_BODY=$(jq -n --arg del "$AUTO_DEL_SOURCE" '{should_remove_source_branch:$del}')
-MERGE_RET=$(api_json_request PUT "${API_BASE}/merge_requests/${MR_IID}/merge" "${MERGE_BODY}")
+MERGE_RET=$(api_form_request PUT "${API_BASE}/merge_requests/${MR_IID}/merge" "合并MergeRequest" \
+    --data-urlencode "should_remove_source_branch=${AUTO_DEL_SOURCE}")
 
 if echo "$MERGE_RET" | jq -e '.state!="merged"' >/dev/null;then
     echo "❌ 合并失败，返回信息：$MERGE_RET"
