@@ -155,11 +155,11 @@
 - `git-merge` 或 `gt merge`：希望严格以远端基线分支为准创建或重建本地目标分支，再把最新来源分支合并进来时使用。
 - `git-auto-merge` 或 `gt gam`：希望通过 GitLab API 创建 MR，检测冲突后自动合并时使用。
 
-## mr
+## git-mr
 
 ### 作用
 
-`mr` 用于输出当前分支到目标分支的 GitLab Merge Request 新建链接；也支持显式指定源分支和目标分支。
+`git-mr` 用于输出当前分支到目标分支的 GitLab Merge Request 新建链接；也支持显式指定源分支和目标分支。
 
 ### 原理描述
 
@@ -168,8 +168,8 @@
 ### 用法
 
 ```bash
-./mr <目标分支>
-./mr <源分支> <目标分支>
+./git-mr <目标分支>
+./git-mr <源分支> <目标分支>
 ./gt mr <目标分支>
 ./gt mr <源分支> <目标分支>
 ```
@@ -177,15 +177,15 @@
 ### 示例
 
 ```bash
-./mr release
-./mr feature/order-refactor release
+./git-mr release
+./git-mr feature/order-refactor release
 ./gt mr release
 ./gt mr feature/order-refactor release
 ```
 
-`./mr release` 和 `./gt mr release` 表示基于当前所在本地分支，生成一个目标分支为 `release` 的 GitLab MR 新建链接。
+`./git-mr release` 和 `./gt mr release` 表示基于当前所在本地分支，生成一个目标分支为 `release` 的 GitLab MR 新建链接。
 
-`./mr feature/order-refactor release` 和 `./gt mr feature/order-refactor release` 表示直接生成源分支 `feature/order-refactor` 指向目标分支 `release` 的 GitLab MR 新建链接。
+`./git-mr feature/order-refactor release` 和 `./gt mr feature/order-refactor release` 表示直接生成源分支 `feature/order-refactor` 指向目标分支 `release` 的 MR 新建链接。
 
 ### 执行流程
 
@@ -202,11 +202,11 @@
 - 省略源分支且当前处于 detached HEAD 时，脚本会直接失败；显式传入源分支时不依赖当前分支。
 - 目前默认按 GitLab 的 MR 地址格式拼接链接。
 
-## cmpr
+## git-compare
 
 ### 作用
 
-`cmpr` 用于输出 GitLab Compare 链接。脚本会自动读取当前仓库的 `origin` 地址，转换成仓库页面地址，再拼接目标远端分支和对比分支。
+`git-compare` 用于输出 GitLab Compare 链接。脚本会自动读取当前仓库的 `origin` 地址，转换成仓库页面地址，再拼接目标远端分支和对比分支。
 
 ### 原理描述
 
@@ -215,7 +215,7 @@
 ### 用法
 
 ```bash
-./cmpr <目标远端分支> [对比分支]
+./git-compare <目标远端分支> [对比分支]
 ./gt cmpr <目标远端分支> [对比分支]
 ```
 
@@ -224,8 +224,8 @@
 ### 示例
 
 ```bash
-./cmpr release
-./cmpr release feature/order-refactor
+./git-compare release
+./git-compare release feature/order-refactor
 ./gt cmpr release
 ./gt cmpr release feature/order-refactor
 ```
@@ -248,11 +248,11 @@
 - 省略对比分支且当前处于 detached HEAD 时，脚本会直接失败。
 - 目前默认按 GitLab 的 Compare 地址格式拼接链接。
 
-## merge
+## git-merge
 
 ### 作用
 
-`merge` 用于基于远端基线分支创建或重建一个本地目标分支，并把另一个远端分支的最新内容合并进来。传 2 个参数时，会按最新 `origin/a` 重建本地 `a`，再把最新 `origin/b` 合并到本地 `a`。
+`git-merge` 用于基于远端基线分支创建或重建一个本地目标分支，并把另一个远端分支的最新内容合并进来。传 2 个参数时，会按最新 `origin/a` 重建本地 `a`，再把最新 `origin/b` 合并到本地 `a`。
 
 ### 原理描述
 
@@ -261,8 +261,8 @@
 ### 用法
 
 ```bash
-./merge <远端基线分支a> <远端来源分支b>
-./merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+./git-merge <远端基线分支a> <远端来源分支b>
+./git-merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ./gt merge <远端基线分支a> <远端来源分支b>
 ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ```
@@ -270,8 +270,8 @@
 ### 示例
 
 ```bash
-./merge local release
-./merge local feature/test release
+./git-merge local release
+./git-merge local feature/test release
 ./gt merge local release
 ./gt merge local feature/test release
 ```
@@ -297,6 +297,8 @@
 
 当前本地分支是否为远端基线分支，不影响最终结果。脚本不会先依赖同名本地分支，而是直接以远端最新基线分支为准创建或重建本地目标分支。
 
+如果当前分支正好是远端基线分支对应的本地分支，脚本仍然会执行 `git checkout --detach origin/a`，再创建或重建目标分支；本地同名分支不会被删除，本地未 push 的提交也不会自动进入目标分支。
+
 ### 注意事项
 
 - 参数不能为空。
@@ -305,4 +307,34 @@
 - 传 3 个参数时，如果远端目标分支已存在，脚本会直接失败。
 - 如果本地目标分支已存在，脚本会按最新远端基线分支重建它。
 - 合并 `origin/c` 时如果出现冲突，脚本会停止，需要手工解决冲突。
-- 更完整的流程说明可查看 [git-merge.md](./git-merge.md)。
+- 创建后的本地 `b` 不跟踪 `origin/a`；如果后续需要建立 `origin/b` 跟踪关系，需要在合适时机手工执行 `git push -u origin b`。
+
+## git-auto-merge
+
+### 作用
+
+`git-auto-merge` 用于通过 GitLab API 创建源分支到目标分支的 Merge Request，等待 GitLab 计算合并状态，确认无代码冲突后调用 API 自动合并。
+
+### 用法
+
+```bash
+./git-auto-merge <源分支> <目标分支>
+./gt gam <源分支> <目标分支>
+```
+
+### 示例
+
+```bash
+./git-auto-merge feature/order-refactor release
+./gt gam feature/order-refactor release
+```
+
+两条命令都表示创建源分支 `feature/order-refactor` 指向目标分支 `release` 的 MR，检测冲突后自动合并。
+
+### 注意事项
+
+- 需要同目录存在 `git_config.json`，并配置有效的 `gl_host`、`gl_token` 和 `project_id_mapping`。
+- 源分支和目标分支必须都存在于 GitLab 项目中，且二者不能相同。
+- 如果已存在同源同目标的打开状态 MR，脚本会直接失败并输出已有 MR 信息。
+- 如果源分支相对目标分支没有提交或文件差异，脚本会直接失败。
+- 该脚本会创建 MR，并在 GitLab 判定可合并时自动执行合并，属于有远端副作用的操作。
