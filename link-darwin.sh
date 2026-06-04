@@ -24,7 +24,7 @@ link_one() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="${HOME}/tools"
-TOOLS=(gam gt merge mr cmpr)
+TOOLS=(git-auto-merge gt git-merge git-mr git-compare)
 
 mkdir -p "${TOOLS_DIR}"
 

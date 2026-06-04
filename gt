@@ -194,19 +194,19 @@ fi
 case "${mode}" in
   cmpr)
     shift
-    run_subcommand cmpr "$@"
+    run_subcommand git-compare "$@"
     ;;
   mr)
     shift
-    run_subcommand mr "$@"
+    run_subcommand git-mr "$@"
     ;;
   merge)
     shift
-    run_subcommand merge "$@"
+    run_subcommand git-merge "$@"
     ;;
   gam)
     shift
-    run_subcommand gam "$@"
+    run_subcommand git-auto-merge "$@"
     ;;
 esac
 

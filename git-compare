@@ -15,11 +15,11 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
-  ./cmpr <目标远端分支> [对比分支]
+  ./git-compare <目标远端分支> [对比分支]
 
 示例:
-  ./cmpr release
-  ./cmpr release feature/order-refactor
+  ./git-compare release
+  ./git-compare release feature/order-refactor
 
 说明:
   输出 GitLab Compare 链接，格式为：

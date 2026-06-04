@@ -23,8 +23,8 @@ fail() {
 print_help() {
   cat <<'EOF'
 用法:
-  ./merge <远端基线分支a> <远端来源分支b>
-  ./merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+  ./git-merge <远端基线分支a> <远端来源分支b>
+  ./git-merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 
 说明:
   传 2 个参数时：基于最新 origin/a 创建或重建本地 a，再把最新 origin/b 合并到 a。

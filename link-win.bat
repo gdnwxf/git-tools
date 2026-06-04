@@ -12,15 +12,15 @@ if not exist "%TOOLS_DIR%" (
   )
 )
 
-call :link_one gam
+call :link_one git-auto-merge
 if errorlevel 1 exit /b 1
 call :link_one gt
 if errorlevel 1 exit /b 1
-call :link_one merge
+call :link_one git-merge
 if errorlevel 1 exit /b 1
-call :link_one mr
+call :link_one git-mr
 if errorlevel 1 exit /b 1
-call :link_one cmpr
+call :link_one git-compare
 if errorlevel 1 exit /b 1
 
 echo done: tool links under "%TOOLS_DIR%" are ready
