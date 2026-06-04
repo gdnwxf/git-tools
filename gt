@@ -49,6 +49,7 @@ print_help() {
   ./gt mr <源分支> <目标分支>
   ./gt merge <远端基线分支a> <远端来源分支b>
   ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+  ./gt gam <源分支> <目标分支>
 
 说明:
   不带参数:
@@ -74,6 +75,9 @@ print_help() {
 
   `merge`:
     基于远端基线分支创建或重建本地目标分支，再合并远端来源分支。
+
+  `gam`:
+    通过 GitLab API 创建 Merge Request，检测冲突后自动合并。
 
   兼容旧用法:
     传入分支名但省略模式时，默认按 `sync` 处理。
@@ -199,6 +203,10 @@ case "${mode}" in
   merge)
     shift
     run_subcommand merge "$@"
+    ;;
+  gam)
+    shift
+    run_subcommand gam "$@"
     ;;
 esac
 
