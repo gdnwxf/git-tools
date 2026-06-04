@@ -1,19 +1,15 @@
 # git-tools
 
-当前仓库包含 6 个 Git 辅助脚本和 1 份独立说明文档。
+当前仓库包含 6 个 Git 辅助脚本。
 
 脚本：
 
 - `create-branch-from-remote.sh`：基于指定远端分支创建新的本地分支；如果只传一个参数，则默认按同名远端分支创建。
 - `gt`：支持 `new`、`sync`、`cmpr`、`mr`、`merge`、`gam` 子命令；既能基于远端创建或重建分支，也能输出 Compare/MR 链接和执行合并。
-- `mr`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
-- `cmpr`：输出目标分支与对比分支的 GitLab Compare 链接。
-- `merge`：基于远端基线分支创建或重建本地目标分支，再合并另一个远端分支。
-- `gam`：通过 GitLab API 创建 Merge Request，检测冲突后自动合并。
-
-独立文档：
-
-- `git-merge.md`：单独说明 `merge` 的使用方式、执行流程和注意事项。
+- `git-mr`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
+- `git-compare`：输出目标分支与对比分支的 GitLab Compare 链接。
+- `git-merge`：基于远端基线分支创建或重建本地目标分支，再合并另一个远端分支。
+- `git-auto-merge`：通过 GitLab API 创建 Merge Request，检测冲突后自动合并。
 
 ## 使用前提
 
@@ -74,10 +70,10 @@
 - 无参数：快进同步最新 `origin/<当前分支>` 到当前本地分支，不删除、不重建本地分支
 - `new`：基于指定远端分支创建新的本地分支
 - `sync`：按指定远端分支重建本地分支；如果本地目标分支已存在，会先删除再重建
-- `cmpr`：输出 GitLab Compare 链接
-- `mr`：输出 GitLab Merge Request 新建链接
-- `merge`：基于远端基线分支创建或重建本地目标分支，再合并远端来源分支
-- `gam`：通过 GitLab API 创建 Merge Request，检测冲突后自动合并
+- `cmpr`：委托 `git-compare` 输出 GitLab Compare 链接
+- `mr`：委托 `git-mr` 输出 GitLab Merge Request 新建链接
+- `merge`：委托 `git-merge` 基于远端基线分支创建或重建本地目标分支，再合并远端来源分支
+- `gam`：委托 `git-auto-merge` 通过 GitLab API 创建 Merge Request，检测冲突后自动合并
 
 为了兼容旧用法，如果传入分支名但省略模式，默认按 `sync` 处理。
 
@@ -121,7 +117,7 @@
 第三条命令表示新建本地 `feature/order-refactor`，基线是最新 `origin/release`。
 第四条命令表示本地 `feature/order-refactor` 直接按最新 `origin/feature/order-refactor` 重建。
 第五条命令表示本地 `feature/order-refactor` 按最新 `origin/release` 重建。
-如果传入分支名但省略 `sync` 模式名，则保持旧行为，默认按重建处理。`gt cmpr`、`gt mr`、`gt merge`、`gt gam` 分别等价于独立执行 `cmpr`、`mr`、`merge`、`gam`。
+如果传入分支名但省略 `sync` 模式名，则保持旧行为，默认按重建处理。`gt cmpr`、`gt mr`、`gt merge`、`gt gam` 分别等价于独立执行 `git-compare`、`git-mr`、`git-merge`、`git-auto-merge`。
 `gt mr feature/order-refactor release` 表示直接生成源分支 `feature/order-refactor` 指向目标分支 `release` 的 MR 新建链接。
 `gt gam feature/order-refactor release` 表示通过 GitLab API 创建源分支 `feature/order-refactor` 指向目标分支 `release` 的 MR，检测冲突后自动合并。
 
@@ -154,10 +150,10 @@
 
 - `create-branch-from-remote.sh`：从指定远端分支快速拉出一个新的本地分支，且创建动作始终以远端状态为准。
 - `gt`：不带参数时用于快进同步当前分支；传入分支名但省略模式时按 `sync` 重建处理；也可统一入口处理“新建分支”和“按远端重建分支”。
-- `mr` 或 `gt mr`：想快速生成当前分支或指定源分支指向目标分支的 GitLab MR 新建链接时使用。
-- `cmpr` 或 `gt cmpr`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
-- `merge` 或 `gt merge`：希望严格以远端基线分支为准创建或重建本地目标分支，再把最新来源分支合并进来时使用。
-- `gam` 或 `gt gam`：希望通过 GitLab API 创建 MR，检测冲突后自动合并时使用。
+- `git-mr` 或 `gt mr`：想快速生成当前分支或指定源分支指向目标分支的 GitLab MR 新建链接时使用。
+- `git-compare` 或 `gt cmpr`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
+- `git-merge` 或 `gt merge`：希望严格以远端基线分支为准创建或重建本地目标分支，再把最新来源分支合并进来时使用。
+- `git-auto-merge` 或 `gt gam`：希望通过 GitLab API 创建 MR，检测冲突后自动合并时使用。
 
 ## mr
 
