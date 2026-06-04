@@ -223,6 +223,7 @@ fi
 MR_IID=$(echo "$CREATE_RET" | jq -r '.iid')
 MR_URL=$(echo "$CREATE_RET" | jq -r '.web_url // empty')
 echo "✅ MR创建成功，MR_IID: $MR_IID"
+print_mr_url
 
 echo -e "\n===== 2. 轮询等待GitLab计算合并状态(冲突检测) ====="
 poll_count=0
@@ -252,7 +253,6 @@ done
 
 if [ $has_calc_done -eq 0 ];then
     echo "❌ 超时：多次轮询GitLab未完成合并状态计算，终止"
-    print_mr_url
     exit 2
 fi
 
@@ -260,13 +260,11 @@ echo -e "\n===== 3. 冲突判定 ====="
 if [ "${HAS_CONFLICT}" = "true" ] || [ "${DETAIL_MERGE_STATUS}" = "conflict" ];then
     echo "❌ 检测到代码存在合并冲突，无法自动合并"
     print_conflict_files_if_available
-    print_mr_url
     exit 3
 fi
 
 if [ "${MERGE_STATUS}" != "can_be_merged" ];then
     echo "⚠️ 不可合并(非代码冲突：审批未过/流水线失败等)，merge_status=${MERGE_STATUS}, detailed_merge_status=${DETAIL_MERGE_STATUS:-N/A}"
-    print_mr_url
     exit 4
 fi
 
@@ -278,7 +276,6 @@ MERGE_RET=$(api_form_request PUT "${API_BASE}/merge_requests/${MR_IID}/merge" "�
 
 if echo "$MERGE_RET" | jq -e '.state!="merged"' >/dev/null;then
     echo "❌ 合并失败，返回信息：$MERGE_RET"
-    print_mr_url
     exit 5
 fi
 
