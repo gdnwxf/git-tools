@@ -120,6 +120,12 @@ api_form_request() {
     printf '%s\n' "${response_body}"
 }
 
+print_mr_url() {
+    if [[ -n "${MR_URL:-}" ]];then
+        echo "MR页面: ${MR_URL}"
+    fi
+}
+
 ensure_gitlab_branch_exists() {
     local branch_name="$1"
     local encoded_branch
@@ -183,44 +189,56 @@ if echo "$CREATE_RET" | jq -e '.iid == null' >/dev/null;then
     exit 1
 fi
 MR_IID=$(echo "$CREATE_RET" | jq -r '.iid')
+MR_URL=$(echo "$CREATE_RET" | jq -r '.web_url // empty')
 echo "✅ MR创建成功，MR_IID: $MR_IID"
+print_mr_url
 
 echo -e "\n===== 2. 轮询等待GitLab计算合并状态(冲突检测) ====="
 poll_count=0
 has_calc_done=0
+DETAIL_MERGE_STATUS=""
 
 while [ $poll_count -lt $MAX_POLL ];do
     poll_count=$((poll_count+1))
     MR_INFO=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}" "" "查询MergeRequest状态")
     MERGE_STATUS=$(echo "$MR_INFO" | jq -r '.merge_status')
+    DETAIL_MERGE_STATUS=$(echo "$MR_INFO" | jq -r '.detailed_merge_status // empty')
     HAS_CONFLICT=$(echo "$MR_INFO" | jq -r '.has_conflicts')
 
-    echo "[${poll_count}/${MAX_POLL}] 当前merge_status:${MERGE_STATUS}, has_conflict:${HAS_CONFLICT}"
+    echo "[${poll_count}/${MAX_POLL}] 当前merge_status:${MERGE_STATUS}, detailed_merge_status:${DETAIL_MERGE_STATUS:-N/A}, has_conflict:${HAS_CONFLICT}"
 
-    if [ "${MERGE_STATUS}" != "unchecked" ];then
-        has_calc_done=1
-        break
-    fi
-    sleep ${SLEEP_INTERVAL}
+    case "${MERGE_STATUS}" in
+        unchecked|checking|cannot_be_merged_recheck)
+            sleep ${SLEEP_INTERVAL}
+            continue
+            ;;
+        *)
+            has_calc_done=1
+            break
+            ;;
+    esac
 done
 
 if [ $has_calc_done -eq 0 ];then
     echo "❌ 超时：多次轮询GitLab未完成合并状态计算，终止"
+    print_mr_url
     exit 2
 fi
 
 echo -e "\n===== 3. 冲突判定 ====="
-if [ "${HAS_CONFLICT}" = "true" ] || [ "${MERGE_STATUS}" = "cannot_be_merged" ];then
+if [ "${HAS_CONFLICT}" = "true" ] || [ "${DETAIL_MERGE_STATUS}" = "conflict" ];then
     echo "❌ 检测到代码存在合并冲突，无法自动合并"
     # 拉取冲突文件列表
     CONFLICT_RET=$(api_json_request GET "${API_BASE}/merge_requests/${MR_IID}/conflicts" "" "查询MergeRequest冲突")
     echo "冲突文件清单："
     echo "$CONFLICT_RET" | jq -r '.conflicts[].new_path'
+    print_mr_url
     exit 3
 fi
 
 if [ "${MERGE_STATUS}" != "can_be_merged" ];then
-    echo "⚠️ 不可合并(非代码冲突：审批未过/流水线失败等)，merge_status=${MERGE_STATUS}"
+    echo "⚠️ 不可合并(非代码冲突：审批未过/流水线失败等)，merge_status=${MERGE_STATUS}, detailed_merge_status=${DETAIL_MERGE_STATUS:-N/A}"
+    print_mr_url
     exit 4
 fi
 
@@ -232,6 +250,7 @@ MERGE_RET=$(api_form_request PUT "${API_BASE}/merge_requests/${MR_IID}/merge" "�
 
 if echo "$MERGE_RET" | jq -e '.state!="merged"' >/dev/null;then
     echo "❌ 合并失败，返回信息：$MERGE_RET"
+    print_mr_url
     exit 5
 fi
 
