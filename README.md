@@ -333,7 +333,7 @@
 
 ### 注意事项
 
-- 需要同目录存在 `git_config.json`，并配置有效的 `gl_host`、`gl_token` 和 `project_id_mapping`。
+- 需要真实脚本目录存在 `git_config.json`，并配置有效的 `gl_host`、`gl_token` 和 `project_id_mapping`；如果通过 `~/tools` 下的链接执行，会自动回到链接指向的脚本目录读取配置。
 - 源分支和目标分支必须都存在于 GitLab 项目中，且二者不能相同。
 - 如果已存在同源同目标的打开状态 MR，脚本会直接失败并输出已有 MR 信息。
 - 如果源分支相对目标分支没有提交或文件差异，脚本会直接失败。

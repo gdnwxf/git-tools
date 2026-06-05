@@ -16,6 +16,19 @@ fail() {
     exit 1
 }
 
+resolve_script_dir() {
+    local source="${BASH_SOURCE[0]}"
+    local dir
+
+    while [[ -L "${source}" ]];do
+        dir="$(cd -P "$(dirname "${source}")" && pwd)"
+        source="$(readlink "${source}")"
+        [[ "${source}" == /* ]] || source="${dir}/${source}"
+    done
+
+    cd -P "$(dirname "${source}")" && pwd
+}
+
 if [[ $# -ne 2 ]];then
     usage
     fail "请传入源分支和目标分支"
@@ -25,7 +38,7 @@ SOURCE_BRANCH="$1"
 TARGET_BRANCH="$2"
 MR_TITLE="[auto] ${SOURCE_BRANCH} to ${TARGET_BRANCH}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(resolve_script_dir)"
 CONFIG_FILE="${SCRIPT_DIR}/git_config.json"
 
 [[ -f "${CONFIG_FILE}" ]] || fail "未找到配置文件: ${CONFIG_FILE}"
