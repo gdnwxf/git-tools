@@ -1,10 +1,9 @@
 # git-tools
 
-当前仓库包含 6 个 Git 辅助脚本。
+当前仓库包含 5 个 Git 辅助脚本。
 
 脚本：
 
-- `create-branch-from-remote.sh`：基于指定远端分支创建新的本地分支；如果只传一个参数，则默认按同名远端分支创建。
 - `gt`：支持 `new`、`sync`、`cmpr`、`mr`、`merge`、`gam` 子命令；既能基于远端创建或重建分支，也能输出 Compare/MR 链接和执行合并。
 - `git-mr`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
 - `git-compare`：输出目标分支与对比分支的 GitLab Compare 链接。
@@ -17,49 +16,6 @@
 - 需要使用 `bash` 执行脚本。
 - 执行前已跟踪文件必须是干净状态；脚本会阻止存在未提交已跟踪改动的场景。
 - 未跟踪文件不会阻止脚本执行，因为脚本只检查已跟踪文件的工作区状态。
-
-## create-branch-from-remote.sh
-
-### 作用
-
-`create-branch-from-remote.sh` 用于基于指定远端分支创建一个新的本地分支。如果只传本地分支名 `a`，则默认从最新 `origin/a` 创建；如果传入 `a b`，则从最新 `origin/b` 创建本地 `a`。
-
-### 原理描述
-
-这个脚本的核心原理是先用 `git fetch --all --prune` 把远端引用同步到本地，再确认目标远端分支存在，最后直接基于这个远端基线创建新的本地分支。这样可以避免依赖当前本地分支状态，也能保证创建动作始终以远端为准。
-
-### 用法
-
-```bash
-./create-branch-from-remote.sh <本地分支名a> [远端分支名b]
-```
-
-### 示例
-
-```bash
-./create-branch-from-remote.sh feature/order-refactor
-./create-branch-from-remote.sh feature/order-refactor release
-```
-
-第一条命令表示本地 `feature/order-refactor` 按最新 `origin/feature/order-refactor` 创建。  
-第二条命令表示本地 `feature/order-refactor` 按最新 `origin/release` 创建。
-
-### 执行流程
-
-1. 校验当前目录是否为 Git 仓库。
-2. 校验已跟踪文件没有未提交改动。
-3. 执行 `git fetch --all --prune` 同步远端引用。
-4. 解析远端基线分支：如果传了 `b`，使用 `origin/b`；如果只传了 `a`，使用 `origin/a`。
-5. 校验目标远端分支存在。
-6. 校验目标本地分支名在本地不存在。
-7. 基于目标远端分支创建并切换到本地目标分支。
-
-### 注意事项
-
-- 参数不能为空。
-- 该脚本只负责创建新分支，不会覆盖已存在的本地目标分支。
-- 如果本地已存在同名目标分支 `a`，脚本会直接失败。
-- 如果目标远端分支不存在，脚本会直接失败。
 
 ## gt
 
@@ -148,7 +104,6 @@
 
 ## 建议使用场景
 
-- `create-branch-from-remote.sh`：从指定远端分支快速拉出一个新的本地分支，且创建动作始终以远端状态为准。
 - `gt`：不带参数时用于快进同步当前分支；传入分支名但省略模式时按 `sync` 重建处理；也可统一入口处理“新建分支”和“按远端重建分支”。
 - `git-mr` 或 `gt mr`：想快速生成当前分支或指定源分支指向目标分支的 GitLab MR 新建链接时使用。
 - `git-compare` 或 `gt cmpr`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
