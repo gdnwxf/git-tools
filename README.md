@@ -1,12 +1,13 @@
 # git-tools
 
-当前仓库包含 5 个 Git 辅助脚本。
+当前仓库包含 6 个 Git 辅助脚本。
 
 脚本：
 
-- `gt`：支持 `new`、`sync`、`cmpr`、`mr`、`merge`、`gam` 子命令；既能基于远端创建或重建分支，也能输出 Compare/MR 链接和执行合并。
+- `gt`：支持 `new`、`sync`、`cmpr`、`mr`、`del`、`merge`、`gam` 子命令；既能基于远端创建或重建分支，也能输出 Compare/MR 链接、删除分支和执行合并。
 - `git-mr`：输出当前分支到目标分支的 GitLab Merge Request 新建链接。
 - `git-compare`：输出目标分支与对比分支的 GitLab Compare 链接。
+- `git-delete`：删除本地分支；传 `-r` 删除远端分支；传 `-a` 同时删除本地和远端分支。
 - `git-merge`：基于远端基线分支创建或重建本地目标分支，再合并另一个远端分支。
 - `git-auto-merge`：通过 GitLab API 创建 Merge Request，检测冲突后自动合并。
 
@@ -28,6 +29,7 @@
 - `sync`：按指定远端分支重建本地分支；如果本地目标分支已存在，会先删除再重建
 - `cmpr`：委托 `git-compare` 输出 GitLab Compare 链接
 - `mr`：委托 `git-mr` 输出 GitLab Merge Request 新建链接
+- `del`：委托 `git-delete` 删除本地分支或远端分支
 - `merge`：委托 `git-merge` 基于远端基线分支创建或重建本地目标分支，再合并远端来源分支
 - `gam`：委托 `git-auto-merge` 通过 GitLab API 创建 Merge Request，检测冲突后自动合并
 
@@ -47,6 +49,9 @@
 ./gt cmpr <目标远端分支> [对比分支]
 ./gt mr <目标分支>
 ./gt mr <源分支> <目标分支>
+./gt del <分支名>
+./gt del -r <分支名>
+./gt del -a <分支名>
 ./gt merge <远端基线分支a> <远端来源分支b>
 ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
 ./gt gam <源分支> <目标分支>
@@ -63,6 +68,9 @@
 ./gt cmpr release
 ./gt mr release
 ./gt mr feature/order-refactor release
+./gt del feature/order-refactor
+./gt del -r feature/order-refactor
+./gt del -a feature/order-refactor
 ./gt merge local release
 ./gt merge local feature/test release
 ./gt gam feature/order-refactor release
@@ -73,8 +81,11 @@
 第三条命令表示新建本地 `feature/order-refactor`，基线是最新 `origin/release`。
 第四条命令表示本地 `feature/order-refactor` 直接按最新 `origin/feature/order-refactor` 重建。
 第五条命令表示本地 `feature/order-refactor` 按最新 `origin/release` 重建。
-如果传入分支名但省略 `sync` 模式名，则保持旧行为，默认按重建处理。`gt cmpr`、`gt mr`、`gt merge`、`gt gam` 分别等价于独立执行 `git-compare`、`git-mr`、`git-merge`、`git-auto-merge`。
+如果传入分支名但省略 `sync` 模式名，则保持旧行为，默认按重建处理。`gt cmpr`、`gt mr`、`gt del`、`gt merge`、`gt gam` 分别等价于独立执行 `git-compare`、`git-mr`、`git-delete`、`git-merge`、`git-auto-merge`。
 `gt mr feature/order-refactor release` 表示直接生成源分支 `feature/order-refactor` 指向目标分支 `release` 的 MR 新建链接。
+`gt del feature/order-refactor` 表示删除本地分支 `feature/order-refactor`。
+`gt del -r feature/order-refactor` 表示删除远端分支 `origin/feature/order-refactor`。
+`gt del -a feature/order-refactor` 表示同时删除本地分支 `feature/order-refactor` 和远端分支 `origin/feature/order-refactor`。
 `gt gam feature/order-refactor release` 表示通过 GitLab API 创建源分支 `feature/order-refactor` 指向目标分支 `release` 的 MR，检测冲突后自动合并。
 
 ### 执行流程
@@ -104,11 +115,50 @@
 
 ## 建议使用场景
 
-- `gt`：不带参数时用于快进同步当前分支；传入分支名但省略模式时按 `sync` 重建处理；也可统一入口处理“新建分支”和“按远端重建分支”。
+- `gt`：不带参数时用于快进同步当前分支；传入分支名但省略模式时按 `sync` 重建处理；也可统一入口处理“新建分支”“按远端重建分支”和“删除分支”。
 - `git-mr` 或 `gt mr`：想快速生成当前分支或指定源分支指向目标分支的 GitLab MR 新建链接时使用。
 - `git-compare` 或 `gt cmpr`：想快速打开目标分支和当前分支，或两个指定分支之间的 GitLab Compare 页面时使用。
+- `git-delete` 或 `gt del`：想删除本地分支、远端分支，或同时删除二者时使用。
 - `git-merge` 或 `gt merge`：希望严格以远端基线分支为准创建或重建本地目标分支，再把最新来源分支合并进来时使用。
 - `git-auto-merge` 或 `gt gam`：希望通过 GitLab API 创建 MR，检测冲突后自动合并时使用。
+
+## git-delete
+
+### 作用
+
+`git-delete` 用于删除分支：默认删除本地分支，传 `-r` 删除 `origin` 上的远端分支，传 `-a` 同时删除本地和远端分支。
+
+### 用法
+
+```bash
+./git-delete <分支名>
+./git-delete -r <分支名>
+./git-delete -a <分支名>
+./gt del <分支名>
+./gt del -r <分支名>
+./gt del -a <分支名>
+```
+
+### 示例
+
+```bash
+./git-delete feature/order-refactor
+./git-delete -r feature/order-refactor
+./git-delete -a feature/order-refactor
+./gt del feature/order-refactor
+./gt del -r feature/order-refactor
+./gt del -a feature/order-refactor
+```
+
+### 注意事项
+
+- 删除本地分支使用 `git branch -d`，如果 Git 判断该分支存在未合并提交，会直接失败。
+- 如果要删除的本地分支正是当前分支，脚本会先切换到当前仓库的主分支，再执行删除。
+- 主分支优先按 `origin/HEAD` 识别，识别不到时回退到 `main` 或 `master`。
+- 如果当前分支本身就是主分支，脚本会拒绝删除。
+- 普通 `gt del <分支名>` 在本地分支不存在时会报错；`gt del -a <分支名>` 会跳过不存在的一侧，只有本地和远端都不存在时才报错。
+- 删除远端分支前会执行 `git fetch --all --prune` 并校验 `origin/<分支名>` 存在。
+- 删除远端分支使用 `git push origin --delete <分支名>`，会产生远端副作用。
 
 ## git-mr
 

@@ -60,6 +60,9 @@ print_help() {
   ./gt cmpr <目标远端分支> [对比分支]
   ./gt mr <目标分支>
   ./gt mr <源分支> <目标分支>
+  ./gt del <分支名>
+  ./gt del -r <分支名>
+  ./gt del -a <分支名>
   ./gt merge <远端基线分支a> <远端来源分支b>
   ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
   ./gt gam <源分支> <目标分支>
@@ -85,6 +88,9 @@ print_help() {
   `mr`:
     输出当前分支到目标分支的 GitLab Merge Request 新建链接。
     如果显式传入源分支，则输出指定源分支到目标分支的 MR 新建链接。
+
+  `del`:
+    删除本地分支；传 `-r` 删除 origin 远端分支；传 `-a` 同时删除本地和远端分支。
 
   `merge`:
     基于远端基线分支创建或重建本地目标分支，再合并远端来源分支。
@@ -212,6 +218,10 @@ case "${mode}" in
   mr)
     shift
     run_subcommand git-mr "$@"
+    ;;
+  delete|del)
+    shift
+    run_subcommand git-delete "$@"
     ;;
   merge)
     shift

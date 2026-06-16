@@ -18,6 +18,8 @@ call :link_one gt
 if errorlevel 1 exit /b 1
 call :link_one git-merge
 if errorlevel 1 exit /b 1
+call :link_one git-delete
+if errorlevel 1 exit /b 1
 call :link_one git-mr
 if errorlevel 1 exit /b 1
 call :link_one git-compare

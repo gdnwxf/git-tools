@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# @description 输出步骤日志，便于定位执行进度
+# @param $1 步骤编号
+# @param $2 步骤说明
+# @returns 无
+step() {
+  printf '\n步骤%s: %s\n' "$1" "$2"
+}
+
+# @description 输出下一步日志
+# @param $1 步骤说明
+# @returns 无
+next_step() {
+  step "${step_number}" "$1"
+  step_number=$((step_number + 1))
+}
+
+# @description 输出错误信息并退出
+# @param $1 错误描述
+# @returns 无
+fail() {
+  printf '错误: %s\n' "$1" >&2
+  exit 1
+}
+
+# @description 输出脚本帮助信息
+# @param 无
+# @returns 无
+print_help() {
+  cat <<'EOF'
+用法:
+  ./git-delete <分支名>
+  ./git-delete -r <分支名>
+  ./git-delete -a <分支名>
+
+说明:
+  不带选项:
+    删除本地分支。
+
+  `-r`:
+    删除 origin 上的远端分支。
+
+  `-a`:
+    同时删除本地分支和 origin 上的远端分支。
+    如果其中一侧分支不存在，会跳过不存在的一侧。
+
+原理:
+  删除本地分支使用 git branch -d，保留 Git 自带的未合并提交保护。
+  如果要删除的本地分支正是当前分支，会先切换到当前仓库的主分支。
+  删除远端分支使用 git push origin --delete <分支名>。
+EOF
+}
+
+# @description 校验当前目录是否位于 Git 仓库内
+# @param 无
+# @returns 校验失败时直接退出
+ensure_git_repo() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "当前目录不是 Git 仓库"
+}
+
+# @description 校验分支名格式是否合法
+# @param $1 分支名
+# @returns 校验失败时直接退出
+ensure_valid_branch_name() {
+  local branch_name="$1"
+  git check-ref-format --branch "${branch_name}" >/dev/null 2>&1 || fail "分支名不合法: ${branch_name}"
+}
+
+# @description 校验本地分支存在
+# @param $1 本地分支名
+# @returns 校验失败时直接退出
+ensure_local_branch_exists() {
+  local branch_name="$1"
+  git show-ref --verify --quiet "refs/heads/${branch_name}" || fail "本地分支 ${branch_name} 不存在"
+}
+
+# @description 校验远端分支存在
+# @param $1 远端分支引用
+# @returns 校验失败时直接退出
+ensure_remote_branch_exists() {
+  local remote_branch_ref="$1"
+  git show-ref --verify --quiet "refs/remotes/${remote_branch_ref}" || fail "远端分支 ${remote_branch_ref} 不存在"
+}
+
+# @description 解析当前仓库主分支名
+# @param $1 要删除的分支名
+# @returns 输出主分支名；解析失败时直接退出
+resolve_primary_branch() {
+  local target_branch="$1"
+  local remote_head=""
+  local remote_default_branch=""
+  local candidate=""
+
+  remote_head="$(git symbolic-ref --quiet --short "refs/remotes/${remote_name}/HEAD" 2>/dev/null || true)"
+  if [[ -n "${remote_head}" ]]; then
+    remote_default_branch="${remote_head#${remote_name}/}"
+    if git show-ref --verify --quiet "refs/heads/${remote_default_branch}" ||
+      git show-ref --verify --quiet "refs/remotes/${remote_name}/${remote_default_branch}"; then
+      printf '%s\n' "${remote_default_branch}"
+      return
+    fi
+  fi
+
+  for candidate in main master; do
+    if git show-ref --verify --quiet "refs/heads/${candidate}" ||
+      git show-ref --verify --quiet "refs/remotes/${remote_name}/${candidate}"; then
+      printf '%s\n' "${candidate}"
+      return
+    fi
+  done
+
+  fail "无法识别当前仓库的主分支，请先手动切换到其他分支后再删除 ${target_branch}"
+}
+
+# @description 切换到当前仓库主分支
+# @param $1 主分支名
+# @param $2 要删除的分支名
+# @returns 切换失败时直接退出
+switch_to_primary_branch() {
+  local primary_branch="$1"
+  local target_branch="$2"
+
+  if [[ "${primary_branch}" == "${target_branch}" ]]; then
+    fail "不能删除当前仓库的主分支 ${target_branch}"
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/${primary_branch}"; then
+    git checkout "${primary_branch}"
+    return
+  fi
+
+  git checkout -b "${primary_branch}" "${remote_name}/${primary_branch}"
+}
+
+# @description 如果目标本地分支是当前分支，则先切换到当前仓库主分支
+# @param $1 本地分支名
+# @returns 切换失败时直接退出
+switch_to_primary_branch_if_current() {
+  local target_branch="$1"
+  local current_branch=""
+  local primary_branch=""
+
+  current_branch="$(git branch --show-current)"
+  if [[ "${current_branch}" == "${target_branch}" ]]; then
+    primary_branch="$(resolve_primary_branch "${target_branch}")"
+    next_step "当前位于 ${target_branch}，切换到主分支 ${primary_branch}"
+    switch_to_primary_branch "${primary_branch}" "${target_branch}"
+  fi
+}
+
+delete_local=1
+delete_remote=0
+delete_all=0
+branch_name=""
+remote_name="origin"
+step_number=1
+local_branch_exists=0
+remote_branch_exists=0
+
+if [[ "$#" -eq 0 ]]; then
+  print_help >&2
+  exit 1
+fi
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -h|--help|help)
+      print_help
+      exit 0
+      ;;
+    -r|--remote)
+      delete_local=0
+      delete_remote=1
+      delete_all=0
+      ;;
+    -a|--all)
+      delete_local=1
+      delete_remote=1
+      delete_all=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      fail "不支持的选项: $1"
+      ;;
+    *)
+      if [[ -n "${branch_name}" ]]; then
+        fail "只能传入一个分支名"
+      fi
+      branch_name="$1"
+      ;;
+  esac
+  shift
+done
+
+while [[ "$#" -gt 0 ]]; do
+  if [[ -n "${branch_name}" ]]; then
+    fail "只能传入一个分支名"
+  fi
+  branch_name="$1"
+  shift
+done
+
+if [[ -z "${branch_name}" ]]; then
+  print_help >&2
+  exit 1
+fi
+
+ensure_git_repo
+
+next_step "校验输入参数"
+ensure_valid_branch_name "${branch_name}"
+if [[ "${delete_local}" -eq 1 ]]; then
+  if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
+    local_branch_exists=1
+    switch_to_primary_branch_if_current "${branch_name}"
+  elif [[ "${delete_all}" -eq 0 ]]; then
+    ensure_local_branch_exists "${branch_name}"
+  else
+    printf '提示: 本地分支 %s 不存在，跳过本地删除\n' "${branch_name}"
+  fi
+fi
+
+if [[ "${delete_remote}" -eq 1 ]]; then
+  next_step "同步远端分支引用"
+  git fetch --all --prune
+  if git show-ref --verify --quiet "refs/remotes/${remote_name}/${branch_name}"; then
+    remote_branch_exists=1
+  elif [[ "${delete_all}" -eq 0 ]]; then
+    ensure_remote_branch_exists "${remote_name}/${branch_name}"
+  else
+    printf '提示: 远端分支 %s/%s 不存在，跳过远端删除\n' "${remote_name}" "${branch_name}"
+  fi
+fi
+
+if [[ "${delete_all}" -eq 1 && "${local_branch_exists}" -eq 0 && "${remote_branch_exists}" -eq 0 ]]; then
+  fail "本地分支 ${branch_name} 和远端分支 ${remote_name}/${branch_name} 都不存在"
+fi
+
+if [[ "${delete_local}" -eq 1 && "${local_branch_exists}" -eq 1 ]]; then
+  next_step "删除本地分支 ${branch_name}"
+  git branch -d -- "${branch_name}"
+fi
+
+if [[ "${delete_remote}" -eq 1 && "${remote_branch_exists}" -eq 1 ]]; then
+  next_step "删除远端分支 ${remote_name}/${branch_name}"
+  git push "${remote_name}" --delete "${branch_name}"
+fi
+
+if [[ "${delete_all}" -eq 1 && "${local_branch_exists}" -eq 1 && "${remote_branch_exists}" -eq 1 ]]; then
+  printf '\n完成: 已删除本地分支 %s 和远端分支 %s/%s\n' "${branch_name}" "${remote_name}" "${branch_name}"
+elif [[ "${delete_remote}" -eq 1 && "${remote_branch_exists}" -eq 1 ]]; then
+  printf '\n完成: 已删除远端分支 %s/%s\n' "${remote_name}" "${branch_name}"
+elif [[ "${delete_local}" -eq 1 && "${local_branch_exists}" -eq 1 ]]; then
+  printf '\n完成: 已删除本地分支 %s\n' "${branch_name}"
+fi
