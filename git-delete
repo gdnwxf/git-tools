@@ -150,6 +150,28 @@ switch_to_primary_branch_if_current() {
   fi
 }
 
+# @description 删除分支前二次确认
+# @param $1 分支名
+# @returns 用户未确认时直接退出
+confirm_delete_branch() {
+  local target_branch="$1"
+  local answer=""
+
+  printf '确定要删除分支 [%s] ? (y/n) ' "${target_branch}"
+  if ! read -r answer; then
+    fail "未读取到确认输入，已取消删除 ${target_branch}"
+  fi
+
+  case "${answer}" in
+    y|Y)
+      ;;
+    *)
+      printf '已取消删除分支 %s\n' "${target_branch}"
+      exit 0
+      ;;
+  esac
+}
+
 delete_local=1
 delete_remote=0
 delete_all=0
@@ -240,6 +262,8 @@ fi
 if [[ "${delete_all}" -eq 1 && "${local_branch_exists}" -eq 0 && "${remote_branch_exists}" -eq 0 ]]; then
   fail "本地分支 ${branch_name} 和远端分支 ${remote_name}/${branch_name} 都不存在"
 fi
+
+confirm_delete_branch "${branch_name}"
 
 if [[ "${delete_local}" -eq 1 && "${local_branch_exists}" -eq 1 ]]; then
   next_step "删除本地分支 ${branch_name}"
