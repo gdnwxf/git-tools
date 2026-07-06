@@ -47,7 +47,7 @@ print_help() {
     如果其中一侧分支不存在，会跳过不存在的一侧。
 
 原理:
-  删除本地分支使用 git branch -d，保留 Git 自带的未合并提交保护。
+  删除本地分支会先使用 git branch -d；如果 Git 判断存在未合并提交，会再次确认后使用 git branch -D 强制删除。
   如果要删除的本地分支正是当前分支，会先切换到当前仓库的主分支。
   删除远端分支使用 git push origin --delete <分支名>。
 EOF
@@ -172,6 +172,43 @@ confirm_delete_branch() {
   esac
 }
 
+# @description 安全删除失败后确认是否强制删除本地分支
+# @param $1 分支名
+# @returns 用户未确认时直接退出
+confirm_force_delete_branch() {
+  local target_branch="$1"
+  local answer=""
+
+  printf '本地分支 [%s] 存在未合并提交，是否强制删除 ? (y/n) ' "${target_branch}"
+  if ! read -r answer; then
+    fail "未读取到确认输入，已取消强制删除 ${target_branch}"
+  fi
+
+  case "${answer}" in
+    y|Y)
+      ;;
+    *)
+      printf '已取消强制删除分支 %s\n' "${target_branch}"
+      exit 0
+      ;;
+  esac
+}
+
+# @description 先安全删除本地分支；遇到未合并保护时，经确认后强制删除
+# @param $1 分支名
+# @returns 删除失败时直接退出
+delete_local_branch() {
+  local target_branch="$1"
+
+  if git branch -d -- "${target_branch}"; then
+    return
+  fi
+
+  confirm_force_delete_branch "${target_branch}"
+  next_step "强制删除本地分支 ${target_branch}"
+  git branch -D -- "${target_branch}"
+}
+
 delete_local=1
 delete_remote=0
 delete_all=0
@@ -267,7 +304,7 @@ confirm_delete_branch "${branch_name}"
 
 if [[ "${delete_local}" -eq 1 && "${local_branch_exists}" -eq 1 ]]; then
   next_step "删除本地分支 ${branch_name}"
-  git branch -d -- "${branch_name}"
+  delete_local_branch "${branch_name}"
 fi
 
 if [[ "${delete_remote}" -eq 1 && "${remote_branch_exists}" -eq 1 ]]; then
