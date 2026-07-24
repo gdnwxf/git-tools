@@ -64,7 +64,7 @@ print_help() {
   ./gt del -r <分支名>
   ./gt del -a <分支名>
   ./gt merge <远端基线分支a> <远端来源分支b>
-  ./gt merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+  ./gt merge <远端来源分支a> <本地目标分支b> <远端基线分支c>
   ./gt gam <源分支> <目标分支>
 
 说明:

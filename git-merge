@@ -24,12 +24,12 @@ print_help() {
   cat <<'EOF'
 用法:
   ./git-merge <远端基线分支a> <远端来源分支b>
-  ./git-merge <远端基线分支a> <本地目标分支b> <远端来源分支c>
+  ./git-merge <远端来源分支a> <本地目标分支b> <远端基线分支c>
 
 说明:
   传 2 个参数时：基于最新 origin/a 创建或重建本地 a，再把最新 origin/b 合并到 a。
-  传 3 个参数时：基于最新 origin/a 创建或重建本地 b，再把最新 origin/c 合并到 b。
-  传 3 个参数时，如果 origin/b 已存在则取消执行；如果本地 b 已存在则重建。
+  传 3 个参数时：先删除本地 b、c，再基于最新 origin/c 创建本地 b，最后把最新 origin/a 合并到 b。
+  传 3 个参数时，如果 origin/b 已存在则取消执行；本地 b、c 存在时会被强制删除。
   如果远端基线分支或远端来源分支不存在，则取消执行。
 
 原理:
@@ -72,31 +72,45 @@ ensure_remote_branch_absent() {
   fi
 }
 
-base_branch="${1:-}"
+# @description 删除本地分支（分支不存在时跳过）
+# @param $1 本地分支名
+# @returns 无
+delete_local_branch_if_exists() {
+  local branch_name="$1"
+
+  if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
+    git branch -D -- "${branch_name}"
+  fi
+}
+
+first_branch="${1:-}"
+base_branch=""
 target_branch=""
 source_branch=""
 remote_name="origin"
 base_remote_ref=""
 source_remote_ref=""
 
-if [[ "${base_branch}" == "-h" || "${base_branch}" == "--help" || "${base_branch}" == "help" ]]; then
+if [[ "${first_branch}" == "-h" || "${first_branch}" == "--help" || "${first_branch}" == "help" ]]; then
   print_help
   exit 0
 fi
 
-if [[ -z "${base_branch}" || -z "${2:-}" ]]; then
+if [[ -z "${first_branch}" || -z "${2:-}" ]]; then
   print_help >&2
   exit 1
 fi
 
 case "$#" in
   2)
+    base_branch="${first_branch}"
     target_branch="${base_branch}"
     source_branch="$2"
     ;;
   3)
+    source_branch="${first_branch}"
     target_branch="$2"
-    source_branch="$3"
+    base_branch="$3"
     ;;
   *)
     print_help >&2
@@ -123,11 +137,21 @@ if [[ "$#" -eq 3 ]]; then
   ensure_remote_branch_absent "${remote_name}/${target_branch}"
 fi
 
-step 3 "基于最新 ${base_remote_ref} 创建或重建本地 ${target_branch}"
-git checkout --detach "${base_remote_ref}"
-git checkout -B "${target_branch}"
+if [[ "$#" -eq 3 ]]; then
+  step 3 "删除本地 ${target_branch} 和 ${base_branch}"
+  git checkout --detach "${base_remote_ref}"
+  delete_local_branch_if_exists "${target_branch}"
+  delete_local_branch_if_exists "${base_branch}"
 
-step 4 "合并最新 ${source_remote_ref} 到 ${target_branch}"
+  step 4 "基于最新 ${base_remote_ref} 创建本地 ${target_branch}"
+  git checkout --no-track -b "${target_branch}" "${base_remote_ref}"
+else
+  step 3 "基于最新 ${base_remote_ref} 创建或重建本地 ${target_branch}"
+  git checkout --detach "${base_remote_ref}"
+  git checkout -B "${target_branch}"
+fi
+
+step 5 "合并最新 ${source_remote_ref} 到 ${target_branch}"
 if ! git merge --no-edit "${source_remote_ref}"; then
   fail "合并 ${source_remote_ref} 到 ${target_branch} 失败，请解决冲突后再继续"
 fi
