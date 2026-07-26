@@ -284,6 +284,12 @@ if [[ "${delete_local}" -eq 1 ]]; then
   fi
 fi
 
+if [[ "${delete_local}" -eq 1 && "${delete_all}" -eq 0 ]]; then
+  if git show-ref --verify --quiet "refs/remotes/${remote_name}/${branch_name}"; then
+    printf '提示: 远端分支 %s/%s 仍存在；如需同时删除本地和远端分支，请使用 ./gt del -a %s\n' "${remote_name}" "${branch_name}" "${branch_name}"
+  fi
+fi
+
 if [[ "${delete_remote}" -eq 1 ]]; then
   next_step "同步远端分支引用"
   git fetch --all --prune
